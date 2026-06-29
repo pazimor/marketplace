@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "memory": {
+      "transport": "sse",
+      "url": "http://127.0.0.1:7333/mcp/sse"
+    }
+  }
+}

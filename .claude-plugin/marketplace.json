@@ -1,0 +1,13 @@
+{
+  "name": "marketplace",
+  "owner": "eddy-hummel",
+  "description": "AI guidance marketplace — memory, skills, and agents for Claude Code",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "name": "memory",
+      "path": "plugins/memory",
+      "description": "Persistent code index (bulk, zero-LLM) + episodic memory (haiku) via FalkorDB + Ollama"
+    }
+  ]
+}

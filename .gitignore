@@ -1,0 +1,16 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+
+# Runtime state
+.mcp-memory/
+*.log
+
+# Docker volumes are external

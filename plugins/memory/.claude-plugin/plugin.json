@@ -1,0 +1,7 @@
+{
+  "name": "memory",
+  "version": "0.1.0",
+  "description": "Persistent code index (bulk, zero-LLM) + episodic memory (haiku)",
+  "hooks": "hooks/hooks.json",
+  "mcp": ".mcp.json"
+}

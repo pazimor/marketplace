@@ -1,0 +1,29 @@
+mcp[cli]>=1.9.0
+falkordb>=1.0.0
+ollama>=0.3.0
+tree-sitter>=0.23.0
+# Tier 1 — Full CALLS + IMPORTS support
+tree-sitter-python>=0.23.0
+tree-sitter-javascript>=0.23.0
+tree-sitter-typescript>=0.23.0
+tree-sitter-go>=0.23.0
+tree-sitter-rust>=0.23.0
+tree-sitter-java>=0.23.0
+tree-sitter-c>=0.23.0
+tree-sitter-cpp>=0.23.0
+tree-sitter-c-sharp>=0.23.0
+# Tier 2 — Partial (best-effort static calls + imports)
+tree-sitter-ruby>=0.23.0
+tree-sitter-php>=0.23.0
+tree-sitter-kotlin>=0.23.0
+tree-sitter-swift>=0.23.0
+tree-sitter-scala>=0.23.0
+# Tier 3 — IMPORTS only
+tree-sitter-bash>=0.23.0
+tree-sitter-lua>=0.23.0
+tree-sitter-haskell>=0.23.0
+tree-sitter-elixir>=0.23.0
+pathspec>=0.12.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
