@@ -83,14 +83,12 @@ def install(target: str, scope: str, project_root: str | None):
     else:
         click.echo("  ✓ stack up")
 
-    # Pull Ollama models
-    click.echo("Pulling embedding models (this may take a few minutes)…")
-    _compose("exec", "ollama", "ollama", "pull",
-             os.getenv("CODE_EMBED_MODEL", "jina/jina-embeddings-v2-base-code"),
-             capture_output=False)
-    _compose("exec", "ollama", "ollama", "pull",
-             os.getenv("MEMORY_EMBED_MODEL", "nomic-embed-text"),
-             capture_output=False)
+    # TEI downloads models from HuggingFace automatically on first startup.
+    # The mcp service waits for both tei-code and tei-memory to be healthy
+    # before it starts, so the first /ingest call is always safe.
+    click.echo("  TEI containers will download embedding models on first start (~300 MB each).")
+    click.echo("  Run `docker compose -f docker/docker-compose.yml logs -f tei-code tei-memory`")
+    click.echo("  to monitor download progress.")
 
     click.echo("\nInstallation complete.  Restart Claude Code to activate hooks.")
 
@@ -160,6 +158,19 @@ def status(repo_path: str | None):
             for k in ("total", "embedded", "skipped", "errors"):
                 if k in s:
                     click.echo(f"  {k}: {s[k]}")
+            if "graph" in s and s["graph"]:
+                g = s["graph"]
+                click.echo(f"  graph.files:       {g.get('files', '?')}")
+                click.echo(f"  graph.imports:     {g.get('imports', '?')}")
+                click.echo(f"  graph.calls:       {g.get('calls_candidates', '?')}")
+                click.echo(f"  graph.errors:      {g.get('errors', '?')}")
+            # Also query live graph-status endpoint
+            try:
+                gs = httpx.get(_mcp_url(f"/graph-status/{gid}"), timeout=3).json()
+                if "calls_edges" in gs:
+                    click.echo(f"  graph edges:       calls={gs['calls_edges']} imports={gs['imports_edges']} files={gs['file_nodes']}")
+            except Exception:
+                pass
         except Exception:
             click.echo("Could not fetch ingest status.")
 

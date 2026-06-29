@@ -158,8 +158,8 @@ async def imported_by(file: str, group_id: str) -> list[dict]:
 # FastAPI app — control plane + health + MCP mount
 # ---------------------------------------------------------------------------
 
-async def _pull_models_background() -> None:
-    """Pull Ollama models in background so startup is never blocked."""
+async def _warm_models_background() -> None:
+    """Download and cache embedding models on startup (blocking download, non-blocking for the server)."""
     from .embedder import ensure_models
 
     loop = asyncio.get_running_loop()
@@ -167,13 +167,13 @@ async def _pull_models_background() -> None:
         await loop.run_in_executor(None, ensure_models)
         log.info("embedding models ready")
     except Exception as exc:
-        log.warning("model pull failed (will retry on first embed call): %s", exc)
+        log.warning("model warm-up failed (will retry on first embed call): %s", exc)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-    asyncio.create_task(_pull_models_background())
+    asyncio.create_task(_warm_models_background())
     yield
 
 

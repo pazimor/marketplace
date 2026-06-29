@@ -16,37 +16,6 @@ services:
       timeout: 3s
       retries: 12
 
-  ollama:
-    image: ollama/ollama:latest
-    expose: ["11434"]
-    networks: [mem-net]
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-    # GPU support — uncomment the block that matches your hardware.
-    # NVIDIA (requires nvidia-container-toolkit on the host):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-    #
-    # AMD ROCm (Linux only):
-    # devices:
-    #   - /dev/kfd:/dev/kfd
-    #   - /dev/dri:/dev/dri
-    #
-    # macOS (Docker Desktop): GPU access is not available in containers on macOS.
-    # Ollama runs on CPU inside Docker. For GPU speed on macOS run Ollama natively
-    # and point OLLAMA_HOST to host.docker.internal in your .env.
-
   mcp:
     build:
       context: ./mcp
@@ -57,18 +26,16 @@ services:
       # Bind-mount repos read-only at the same path so code_fetch can read host files.
       # macOS: set REPOS_ROOT=/Users  Linux: set REPOS_ROOT=/home or /
       - "${REPOS_ROOT:-/Users}:${REPOS_ROOT:-/Users}:ro"
+      # Persistent model cache — downloaded once, reused across restarts.
+      - embed-models:/data/models
     environment:
       FALKORDB_HOST: falkordb
       FALKORDB_PORT: "6379"
-      OLLAMA_HOST: "${OLLAMA_HOST:-ollama}"
-      OLLAMA_PORT: "${OLLAMA_PORT:-11434}"
-      CODE_EMBED_MODEL: "${CODE_EMBED_MODEL:-nomic-embed-text}"
-      MEMORY_EMBED_MODEL: "${MEMORY_EMBED_MODEL:-nomic-embed-text}"
+      CODE_EMBED_MODEL: "${CODE_EMBED_MODEL:-jinaai/jina-embeddings-v2-base-code}"
+      MEMORY_EMBED_MODEL: "${MEMORY_EMBED_MODEL:-BAAI/bge-m3}"
       MAX_DIM: "${MAX_DIM:-2048}"
     depends_on:
       falkordb:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -80,9 +47,7 @@ services:
 networks:
   mem-net:
     driver: bridge
-    # Not internal — Ollama needs internet to pull models.
-    # FalkorDB and Ollama are isolated by having no host port mappings.
 
 volumes:
   falkordb_data:
-  ollama_data:
+  embed-models:

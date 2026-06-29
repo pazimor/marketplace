@@ -68,11 +68,11 @@ def run_checks(mcp_host: str = "127.0.0.1", mcp_port: int = 7333) -> list[Check]
             capture_output=True, text=True, timeout=10,
         )
         running = r.stdout.strip().splitlines()
-        expected = {"falkordb", "ollama", "mcp"}
+        expected = {"falkordb", "mcp"}
         missing  = expected - set(running)
         if missing:
             return False, f"not running: {', '.join(missing)}"
-        return True, "falkordb, ollama, mcp"
+        return True, "falkordb, mcp"
     add("Stack running", _stack)
 
     # MCP reachable
