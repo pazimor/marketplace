@@ -654,9 +654,14 @@ _FUNCTION_TYPES = {
 }
 
 _CLASS_TYPES = {
-    "class_definition", "class_declaration",
-    "type_declaration", "impl_item",
-    "class_specifier", "struct_specifier",
+    "class_definition",      # Python / Scala
+    "class_declaration",     # JS/TS / Java / C# / PHP / Kotlin / Swift
+    "type_declaration",      # Go (struct-like)
+    "impl_item",             # Rust (method block for a type)
+    "class_specifier",       # C++
+    "struct_specifier",      # C++
+    "interface_declaration", # Java / C# / PHP / Kotlin / Swift
+    # "module" excluded: root node type in Python's grammar (see ingestion.py note)
 }
 
 
@@ -780,9 +785,9 @@ def _write_calls(g, group_id: str, chunk_calls: dict[str, list[str]]) -> None:
         return
 
     for src_cid, callee_names in chunk_calls.items():
-        # Verify source chunk exists
+        # Verify source chunk exists AND is valid
         exists = g.query(
-            "MATCH (c:CodeChunk {id: $id}) RETURN c.id LIMIT 1",
+            "MATCH (c:CodeChunk {id: $id, valid: true}) RETURN c.id LIMIT 1",
             {"id": src_cid},
         )
         if not exists.result_set:

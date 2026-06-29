@@ -130,14 +130,16 @@ _FUNCTION_TYPES = {
 }
 
 _CLASS_TYPES = {
-    "class_definition",    # Python / Scala
-    "class_declaration",   # JS/TS / Java / C# / PHP / Kotlin / Swift
-    "type_declaration",    # Go (struct-like)
-    "impl_item",           # Rust (method block for a type)
-    "class_specifier",     # C++
-    "struct_specifier",    # C++
+    "class_definition",      # Python / Scala
+    "class_declaration",     # JS/TS / Java / C# / PHP / Kotlin / Swift
+    "type_declaration",      # Go (struct-like)
+    "impl_item",             # Rust (method block for a type)
+    "class_specifier",       # C++
+    "struct_specifier",      # C++
     "interface_declaration", # Java / C# / PHP / Kotlin / Swift
-    "module",              # Ruby
+    # NOTE: "module" intentionally excluded — it is the root node type in
+    # Python's tree-sitter grammar and would incorrectly shadow all top-level
+    # functions.  Ruby module namespacing is handled via "class_declaration".
 }
 
 _NAME_FIELD = "name"
@@ -322,6 +324,11 @@ def _upsert_chunk(group_id: str, chunk: Chunk) -> bool:
     existing_hash = result.result_set[0][0] if result.result_set else None
 
     if existing_hash == chash:
+        # Always re-validate even when content unchanged (may have been invalidated by cleanup/reindex)
+        g.query(
+            "MATCH (c:CodeChunk {id: $id}) SET c.valid = true",
+            {"id": cid},
+        )
         return False
 
     vec = embed(chunk.content, purpose="code")
