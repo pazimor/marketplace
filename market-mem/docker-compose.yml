@@ -31,8 +31,8 @@ services:
     environment:
       FALKORDB_HOST: falkordb
       FALKORDB_PORT: "6379"
-      CODE_EMBED_MODEL: "${CODE_EMBED_MODEL:-jinaai/jina-embeddings-v2-base-code}"
-      MEMORY_EMBED_MODEL: "${MEMORY_EMBED_MODEL:-BAAI/bge-m3}"
+      CODE_EMBED_MODEL: "${CODE_EMBED_MODEL:-microsoft/graphcodebert-base}"
+      MEMORY_EMBED_MODEL: "${MEMORY_EMBED_MODEL:-nomic-ai/nomic-embed-text-v1.5}"
       MAX_DIM: "${MAX_DIM:-2048}"
     depends_on:
       falkordb:

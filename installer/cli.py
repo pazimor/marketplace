@@ -87,7 +87,7 @@ def install(target: str, scope: str, project_root: str | None):
     # The mcp service waits for both tei-code and tei-memory to be healthy
     # before it starts, so the first /ingest call is always safe.
     click.echo("  TEI containers will download embedding models on first start (~300 MB each).")
-    click.echo("  Run `docker compose -f docker/docker-compose.yml logs -f tei-code tei-memory`")
+    click.echo("  Run `docker compose -f market-mem/docker-compose.yml logs -f tei-code tei-memory`")
     click.echo("  to monitor download progress.")
 
     click.echo("\nInstallation complete.  Restart Claude Code to activate hooks.")

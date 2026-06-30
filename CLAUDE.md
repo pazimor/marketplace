@@ -47,7 +47,7 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 - Code is stored **by reference** (`path + [start_line, end_line]`), never copied into the DB
 - `content_hash` gates re-embedding — only changed symbols are re-embedded
 - Vector index uses `MAX_DIM = 2048` with zero-padding; switching embedding models = recompute, never index recreation
-- Embedding models: `jina-embeddings-v2-base-code` (code, 768d) and `nomic-embed-text` (memory, 768d)
+- Embedding models: `microsoft/graphcodebert-base` (code, 768d) and `nomic-ai/nomic-embed-text-v1.5` (memory, 768d)
 - `group_id` = `hash(git remote URL)` (fallback: `hash(repo_path)`); one FalkorDB graph per project
 
 ### MCP tools
@@ -85,7 +85,7 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 - Haiku is called only when session is "dirty" (two-stage deterministic gate)
 - `SubagentStop` does **not** write episodic memory; it only reconciles code RAG
 - Ollama runs **inside Docker** (`mem_net`), not reusing the host's Ollama instance
-- Code chunking = **per function** (AST, tree-sitter); docstrings kept (they're training signal for jina-v2-base-code)
+- Code chunking = **per function** (AST, tree-sitter); docstrings kept (signal for embedding quality)
 
 ## Open decisions (to resolve during implementation)
 - `group_id` hashing: `git remote URL` preferred, `repo_path` fallback (needs confirmation)
