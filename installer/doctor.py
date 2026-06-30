@@ -77,7 +77,7 @@ def run_checks(mcp_host: str = "127.0.0.1", mcp_port: int = 7333) -> list[Check]
 
     # MCP reachable
     def _mcp():
-        r = httpx.get(f"http://{mcp_host}:{mcp_port}/health", timeout=5)
+        r = httpx.get(f"https://{mcp_host}:{mcp_port}/health", timeout=5, verify=False)
         return r.status_code == 200, r.json().get("status", "")
     c_mcp = add("MCP server /health", _mcp)
 

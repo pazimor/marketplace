@@ -12,7 +12,11 @@ import httpx
 
 MEM_HOST = os.getenv("MEM_HOST", "127.0.0.1")
 MEM_PORT = os.getenv("MEM_PORT", "7333")
-MEM_URL  = f"http://{MEM_HOST}:{MEM_PORT}"
+MEM_URL  = f"https://{MEM_HOST}:{MEM_PORT}"
+# Loopback-only connection with a locally-trusted (mkcert) cert. httpx uses the
+# certifi bundle, not the macOS keychain, so skip verification — no MITM risk on
+# 127.0.0.1.
+MEM_VERIFY = False
 
 DIRTY_MARKER_NAME   = ".mcp-memory/dirty"
 SESSION_LOG_NAME    = ".mcp-memory/session.log"
@@ -81,7 +85,7 @@ def clear_session_log(repo_path: str) -> None:
 
 def mcp_get(path: str, timeout: float = 5.0) -> dict | None:
     try:
-        r = httpx.get(f"{MEM_URL}{path}", timeout=timeout)
+        r = httpx.get(f"{MEM_URL}{path}", timeout=timeout, verify=MEM_VERIFY)
         r.raise_for_status()
         return r.json()
     except Exception:
@@ -90,7 +94,7 @@ def mcp_get(path: str, timeout: float = 5.0) -> dict | None:
 
 def mcp_post(path: str, body: dict, timeout: float = 10.0) -> dict | None:
     try:
-        r = httpx.post(f"{MEM_URL}{path}", json=body, timeout=timeout)
+        r = httpx.post(f"{MEM_URL}{path}", json=body, timeout=timeout, verify=MEM_VERIFY)
         r.raise_for_status()
         return r.json()
     except Exception:

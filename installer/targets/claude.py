@@ -1,135 +1,101 @@
 """
 Install / uninstall the memory plugin for Claude Code.
 
-What gets installed
-───────────────────
-user scope   → ~/.claude/hooks/market/*.py
-               ~/.claude.json   (memory server entry merged into mcpServers)
-               ~/.claude/settings.json  (hooks merged in)
+Canonical install path — drives the NATIVE plugin system (so the plugin shows
+up under "Personal plugins") instead of hand-patching settings.json:
 
-project scope → <repo>/.claude/hooks/market/*.py
-                <repo>/.mcp.json
-                <repo>/.claude/settings.json
+  1. register the local marketplace   (claude plugin marketplace add <repo>)
+  2. install the memory plugin         (claude plugin install memory@marketplace)
+     → hooks (hooks/hooks.json) and MCP (.mcp.json) are auto-discovered by Claude
+  3. configure the Claude Desktop bridge (claude_desktop_config.json, mcp-remote)
+
+No hooks are copied and settings.json is never touched, so install/uninstall is
+fully reversible and idempotent — no duplicate hooks, no leftover MCP entries.
 """
 from __future__ import annotations
 
 import json
-import shutil
+import subprocess
 from pathlib import Path
 
-from ..manifest import record_file, record_json_patch, get_manifest
+from ..manifest import record_json_patch, get_manifest
 
-_PLUGIN_ROOT = Path(__file__).parents[2] / "plugins" / "memory"
-_HOOKS_SRC   = _PLUGIN_ROOT / "hooks"
-_HOOK_SCRIPTS = [
-    "session_start.py",
-    "post_tool_use.py",
-    "stop.py",
-    "subagent_stop.py",
-    "session_end.py",
-    "_lib.py",
-    "_haiku.py",
-]
-
-# MEM_HOOKS_DIR is set in the hook command so each script can locate _lib.py
-_HOOK_EVENTS = {
-    "SessionStart":  "session_start.py",
-    "PostToolUse":   "post_tool_use.py",   # matcher: Write|Edit|MultiEdit
-    "Stop":          "stop.py",
-    "SubagentStop":  "subagent_stop.py",
-}
+_REPO_ROOT       = Path(__file__).parents[2]
+_MARKETPLACE     = "marketplace"            # marketplace.json "name"
+_PLUGIN          = "memory"                 # plugin.json "name"
+_PLUGIN_ID       = f"{_PLUGIN}@{_MARKETPLACE}"
+_MCP_URL         = "https://127.0.0.1:7333/mcp/sse"
+_DESKTOP_CONFIG  = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
 
 
-def _claude_dir(scope: str, project_root: str | None) -> Path:
-    if scope == "user":
-        return Path.home() / ".claude"
-    return Path(project_root) / ".claude"
+def _claude(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["claude", *args], capture_output=True, text=True)
 
 
-def _hooks_dst(scope: str, project_root: str | None) -> Path:
-    return _claude_dir(scope, project_root) / "hooks" / "market"
+def _caroot() -> str:
+    r = subprocess.run(["mkcert", "-CAROOT"], capture_output=True, text=True)
+    if r.returncode == 0 and r.stdout.strip():
+        return str(Path(r.stdout.strip()) / "rootCA.pem")
+    return str(Path.home() / "Library" / "Application Support" / "mkcert" / "rootCA.pem")
 
+
+# ---------------------------------------------------------------------------
+# install
+# ---------------------------------------------------------------------------
 
 def install(scope: str, project_root: str | None) -> None:
-    hooks_dst = _hooks_dst(scope, project_root)
-    hooks_dst.mkdir(parents=True, exist_ok=True)
+    # 1. Register the local marketplace (idempotent: update if already added).
+    add = _claude("plugin", "marketplace", "add", str(_REPO_ROOT))
+    if add.returncode != 0:
+        upd = _claude("plugin", "marketplace", "update", _MARKETPLACE)
+        if upd.returncode != 0:
+            raise RuntimeError(
+                f"marketplace add/update failed: {add.stderr.strip() or upd.stderr.strip()}"
+            )
 
-    # 1. Copy hook scripts
-    for script in _HOOK_SCRIPTS:
-        src = _HOOKS_SRC / script
-        dst = hooks_dst / script
-        shutil.copy2(src, dst)
-        dst.chmod(0o755)
-        record_file(scope, str(src), str(dst), project_root)
+    # 2. Install the plugin (idempotent: reinstall to pick up manifest changes).
+    if _is_installed():
+        _claude("plugin", "uninstall", _PLUGIN_ID)
+    inst = _claude("plugin", "install", _PLUGIN_ID)
+    if inst.returncode != 0:
+        raise RuntimeError(f"plugin install failed: {inst.stderr.strip()}")
 
-    # 2. Merge MCP server entry
-    _merge_mcp(scope, project_root, hooks_dst)
-
-    # 3. Merge hook commands into settings.json
-    _merge_hooks(scope, project_root, hooks_dst)
+    # 3. Configure the Claude Desktop bridge (local server → mcp-remote over TLS).
+    _configure_desktop_bridge(scope, project_root)
 
 
-def _merge_mcp(scope: str, project_root: str | None, hooks_dst: Path) -> None:
-    # User-scope MCP servers live in ~/.claude.json (top-level "mcpServers").
-    # Claude Code does NOT read ~/.claude/.mcp.json. Project scope uses the
-    # repo-root .mcp.json, which Claude Code does read.
-    if scope == "user":
-        mcp_path = Path.home() / ".claude.json"
-    else:
-        mcp_path = Path(project_root) / ".mcp.json"
+def _is_installed() -> bool:
+    r = _claude("plugin", "list")
+    return _PLUGIN_ID in r.stdout
 
-    data = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
+
+def _configure_desktop_bridge(scope: str, project_root: str | None) -> None:
+    if not _DESKTOP_CONFIG.parent.exists():
+        return  # Claude Desktop not installed on this machine — skip silently.
+
+    data = json.loads(_DESKTOP_CONFIG.read_text()) if _DESKTOP_CONFIG.exists() else {}
     data.setdefault("mcpServers", {})
-    entry = {"type": "sse", "url": "http://127.0.0.1:7333/mcp/sse"}
-    data["mcpServers"]["memory"] = entry
-    mcp_path.parent.mkdir(parents=True, exist_ok=True)
-    mcp_path.write_text(json.dumps(data, indent=2))
-    record_json_patch(scope, str(mcp_path), ["mcpServers", "memory"], entry, project_root)
+    entry = {
+        "command": "npx",
+        "args": ["mcp-remote", _MCP_URL],
+        "env": {"NODE_EXTRA_CA_CERTS": _caroot()},
+    }
+    data["mcpServers"][_PLUGIN] = entry
+    _DESKTOP_CONFIG.write_text(json.dumps(data, indent=2))
+    record_json_patch(scope, str(_DESKTOP_CONFIG), ["mcpServers", _PLUGIN], entry, project_root)
 
 
-def _merge_hooks(scope: str, project_root: str | None, hooks_dst: Path) -> None:
-    if scope == "user":
-        settings_path = Path.home() / ".claude" / "settings.json"
-    else:
-        settings_path = _claude_dir(scope, project_root) / "settings.json"
-
-    data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
-    data.setdefault("hooks", {})
-
-    for event, script in _HOOK_EVENTS.items():
-        cmd = f"MEM_HOOKS_DIR={hooks_dst} python3 {hooks_dst / script}"
-        hook_entry: dict = {"type": "command", "command": cmd}
-
-        if event == "PostToolUse":
-            matcher_obj = {"matcher": "Write|Edit|MultiEdit", "hooks": [hook_entry]}
-        else:
-            matcher_obj = {"hooks": [hook_entry]}
-
-        data["hooks"].setdefault(event, [])
-        # Idempotent: don't add duplicates
-        existing_cmds = [
-            h.get("command", "")
-            for obj in data["hooks"][event]
-            for h in obj.get("hooks", [])
-        ]
-        if cmd not in existing_cmds:
-            data["hooks"][event].append(matcher_obj)
-
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(json.dumps(data, indent=2))
-    record_json_patch(scope, str(settings_path), ["hooks"], "mem_hooks", project_root)
-
+# ---------------------------------------------------------------------------
+# uninstall
+# ---------------------------------------------------------------------------
 
 def uninstall(scope: str, project_root: str | None) -> None:
+    if _is_installed():
+        _claude("plugin", "uninstall", _PLUGIN_ID)
+    _claude("plugin", "marketplace", "remove", _MARKETPLACE)
+
+    # Remove recorded JSON patches (e.g. the Desktop bridge entry).
     manifest = get_manifest(scope, project_root)
-
-    # Remove copied files
-    for entry in manifest.get("files", []):
-        p = Path(entry["dst"])
-        if p.exists():
-            p.unlink()
-
-    # Remove JSON patches
     for patch in manifest.get("json_patches", []):
         target = Path(patch["target"])
         if not target.exists():

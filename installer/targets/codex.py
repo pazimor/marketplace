@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ..manifest import record_file, record_json_patch, get_manifest
 
-_MCP_SERVER_URL  = "http://127.0.0.1:7333/mcp/sse"
+_MCP_SERVER_URL  = "https://127.0.0.1:7333/mcp/sse"
 _MCP_SERVER_NAME = "memory"
 
 _AGENTS_MD_SECTION = """\

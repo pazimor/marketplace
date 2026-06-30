@@ -22,6 +22,46 @@ import httpx
 _COMPOSE_FILE = Path(__file__).parents[1] / "market-mem" / "docker-compose.yml"
 _ENV_FILE     = Path(__file__).parents[1] / "market-mem" / ".env"
 _PLUGIN_ROOT  = Path(__file__).parents[1] / "plugins" / "memory"
+_CERTS_DIR    = _COMPOSE_FILE.parent / "certs"
+
+
+def _setup_tls() -> None:
+    """Install a locally-trusted CA (mkcert) and generate the server cert.
+
+    The MCP server serves https; mkcert's CA must be trusted so the Claude Code
+    native client connects without warnings. `mkcert -install` may prompt for
+    the macOS password — that's expected and only needed once per machine.
+    """
+    import shutil
+
+    if shutil.which("mkcert") is None:
+        click.echo("  ✗ mkcert not found — install it first:  brew install mkcert", err=True)
+        click.echo("    (TLS setup skipped; the https server will start but the cert won't be trusted)", err=True)
+        return
+
+    # Install the local CA into the system trust store (idempotent).
+    r = subprocess.run(["mkcert", "-install"], capture_output=True, text=True)
+    if r.returncode != 0:
+        click.echo("  ! mkcert -install needs your password; run it once manually:  mkcert -install", err=True)
+    else:
+        click.echo("  ✓ local CA trusted")
+
+    # Generate the server cert if missing.
+    crt = _CERTS_DIR / "server.crt"
+    key = _CERTS_DIR / "server.key"
+    if crt.exists() and key.exists():
+        click.echo("  ✓ server cert present")
+        return
+    _CERTS_DIR.mkdir(parents=True, exist_ok=True)
+    g = subprocess.run(
+        ["mkcert", "-cert-file", str(crt), "-key-file", str(key),
+         "127.0.0.1", "localhost", "::1"],
+        capture_output=True, text=True,
+    )
+    if g.returncode == 0:
+        click.echo("  ✓ server cert generated")
+    else:
+        click.echo(f"  ✗ cert generation failed: {g.stderr.strip()}", err=True)
 
 
 def _compose(*args, **kwargs):
@@ -35,7 +75,7 @@ def _compose(*args, **kwargs):
 def _mcp_url(path: str = "") -> str:
     host = os.getenv("MEM_HOST", "127.0.0.1")
     port = os.getenv("MEM_PORT", "7333")
-    return f"http://{host}:{port}{path}"
+    return f"https://{host}:{port}{path}"
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +114,10 @@ def install(target: str, scope: str, project_root: str | None):
         except Exception as e:
             click.echo(f"  ✗ {e}", err=True)
             sys.exit(1)
+
+    # Set up local TLS (mkcert CA + server cert) before starting the stack.
+    click.echo("Setting up TLS (mkcert)…")
+    _setup_tls()
 
     # Start Docker stack
     click.echo("Starting Docker stack…")
@@ -126,10 +170,8 @@ def uninstall(target: str, scope: str, project_root: str | None):
 @click.option("--repo-path", default=None, help="Check ingest status for a specific repo.")
 def status(repo_path: str | None):
     """Show ingest status for the current project."""
-    from .targets.claude import _hooks_dst  # noqa: just to confirm install
-
     try:
-        health = httpx.get(_mcp_url("/health"), timeout=3).json()
+        health = httpx.get(_mcp_url("/health"), timeout=3, verify=False).json()
         click.echo(f"MCP server: {health.get('status', '?')}")
     except Exception:
         click.echo("MCP server: unreachable")
@@ -146,7 +188,7 @@ def status(repo_path: str | None):
             url = str(Path(repo_path).resolve())
         gid = hashlib.sha256(url.encode()).hexdigest()[:16]
         try:
-            s = httpx.get(_mcp_url(f"/status/{gid}"), timeout=3).json()
+            s = httpx.get(_mcp_url(f"/status/{gid}"), timeout=3, verify=False).json()
             click.echo(f"Ingest [{gid}]: {s.get('status', '?')}")
             for k in ("total", "embedded", "skipped", "errors"):
                 if k in s:
@@ -159,7 +201,7 @@ def status(repo_path: str | None):
                 click.echo(f"  graph.errors:      {g.get('errors', '?')}")
             # Also query live graph-status endpoint
             try:
-                gs = httpx.get(_mcp_url(f"/graph-status/{gid}"), timeout=3).json()
+                gs = httpx.get(_mcp_url(f"/graph-status/{gid}"), timeout=3, verify=False).json()
                 if "calls_edges" in gs:
                     click.echo(f"  graph edges:       calls={gs['calls_edges']} imports={gs['imports_edges']} files={gs['file_nodes']}")
             except Exception:
@@ -215,6 +257,7 @@ def ingest(repo_path: str | None):
             _mcp_url("/ingest"),
             json={"group_id": gid, "repo_path": repo_path},
             timeout=10,
+            verify=False,
         )
         click.echo(r.json())
     except Exception as e:

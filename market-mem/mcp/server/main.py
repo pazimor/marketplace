@@ -271,9 +271,20 @@ app.mount("/mcp", mcp.sse_app())
 
 
 if __name__ == "__main__":
+    import os
+
+    # Optional TLS: if cert + key are provided (mounted into the container),
+    # serve https. Falls back to plain http when unset (backward compatible).
+    ssl_kwargs = {}
+    cert = os.getenv("TLS_CERT_FILE")
+    key = os.getenv("TLS_KEY_FILE")
+    if cert and key and os.path.exists(cert) and os.path.exists(key):
+        ssl_kwargs = {"ssl_certfile": cert, "ssl_keyfile": key}
+
     uvicorn.run(
         "server.main:app",
         host="0.0.0.0",
         port=config.SERVER_PORT,
         log_level="info",
+        **ssl_kwargs,
     )
