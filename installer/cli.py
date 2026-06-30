@@ -19,8 +19,8 @@ from pathlib import Path
 import click
 import httpx
 
-_COMPOSE_FILE = Path(__file__).parents[1] / "docker" / "docker-compose.yml"
-_ENV_FILE     = Path(__file__).parents[1] / "docker" / ".env"
+_COMPOSE_FILE = Path(__file__).parents[1] / "market-mem" / "docker-compose.yml"
+_ENV_FILE     = Path(__file__).parents[1] / "market-mem" / ".env"
 _PLUGIN_ROOT  = Path(__file__).parents[1] / "plugins" / "memory"
 
 
@@ -82,13 +82,6 @@ def install(target: str, scope: str, project_root: str | None):
         click.echo("  ✗ docker compose up failed — run `mem doctor` for details", err=True)
     else:
         click.echo("  ✓ stack up")
-
-    # TEI downloads models from HuggingFace automatically on first startup.
-    # The mcp service waits for both tei-code and tei-memory to be healthy
-    # before it starts, so the first /ingest call is always safe.
-    click.echo("  TEI containers will download embedding models on first start (~300 MB each).")
-    click.echo("  Run `docker compose -f market-mem/docker-compose.yml logs -f tei-code tei-memory`")
-    click.echo("  to monitor download progress.")
 
     click.echo("\nInstallation complete.  Restart Claude Code to activate hooks.")
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 
-COMPOSE_FILE = Path(__file__).parents[1] / "docker" / "docker-compose.yml"
+COMPOSE_FILE = Path(__file__).parents[1] / "market-mem" / "docker-compose.yml"
 
 
 class Check:
