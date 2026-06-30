@@ -4,7 +4,7 @@ Install / uninstall the memory plugin for Claude Code.
 What gets installed
 ───────────────────
 user scope   → ~/.claude/hooks/market/*.py
-               ~/.claude/.mcp.json   (memory server entry merged in)
+               ~/.claude.json   (memory server entry merged into mcpServers)
                ~/.claude/settings.json  (hooks merged in)
 
 project scope → <repo>/.claude/hooks/market/*.py
@@ -70,14 +70,17 @@ def install(scope: str, project_root: str | None) -> None:
 
 
 def _merge_mcp(scope: str, project_root: str | None, hooks_dst: Path) -> None:
+    # User-scope MCP servers live in ~/.claude.json (top-level "mcpServers").
+    # Claude Code does NOT read ~/.claude/.mcp.json. Project scope uses the
+    # repo-root .mcp.json, which Claude Code does read.
     if scope == "user":
-        mcp_path = Path.home() / ".claude" / ".mcp.json"
+        mcp_path = Path.home() / ".claude.json"
     else:
         mcp_path = Path(project_root) / ".mcp.json"
 
     data = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
     data.setdefault("mcpServers", {})
-    entry = {"transport": "sse", "url": "http://127.0.0.1:7333/mcp/sse"}
+    entry = {"type": "sse", "url": "http://127.0.0.1:7333/mcp/sse"}
     data["mcpServers"]["memory"] = entry
     mcp_path.parent.mkdir(parents=True, exist_ok=True)
     mcp_path.write_text(json.dumps(data, indent=2))

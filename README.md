@@ -25,7 +25,7 @@ market --help
 
 ```bash
 # Installer le plugin (une fois par machine)
-market install --target `claude` --scope user
+market install --target 'claude' --scope user
 
 # Vérifier que tout tourne
 market doctor
@@ -37,7 +37,7 @@ market status
 market ingest --repo-path /chemin/vers/ton/repo
 
 # Désinstaller (réversible, lit le manifeste)
-market uninstall --target `claude` --scope user
+market uninstall --target 'claude' --scope user
 ```
 
 > Redémarre Claude Code après `install` pour activer les hooks.
