@@ -1,13 +1,13 @@
 """
-mem — marketplace installer CLI.
+market — marketplace installer CLI.
 
 Commands
 ────────
-mem install   --target claude|codex|both  --scope user|project  [--project-root PATH]
-mem uninstall --target claude|codex|both  --scope user|project  [--project-root PATH]
-mem status
-mem doctor
-mem ingest    --repo-path PATH  (manual trigger, useful for Codex or first-time setup)
+market install   --target claude|codex|both  --scope user|project  [--project-root PATH]
+market uninstall --target claude|codex|both  --scope user|project  [--project-root PATH]
+market status
+market doctor
+market ingest    --repo-path PATH  (manual trigger, useful for Codex or first-time setup)
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def _mcp_url(path: str = "") -> str:
 
 @click.group()
 def main():
-    """mem — memory marketplace installer for Claude Code."""
+    """market — memory marketplace installer for Claude Code."""
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ def install(target: str, scope: str, project_root: str | None):
     click.echo("Starting Docker stack…")
     r = _compose("up", "-d", "--remove-orphans", capture_output=True)
     if r.returncode != 0:
-        click.echo("  ✗ docker compose up failed — run `mem doctor` for details", err=True)
+        click.echo("  ✗ docker compose up failed — run `market doctor` for details", err=True)
     else:
         click.echo("  ✓ stack up")
 

@@ -2,15 +2,13 @@
 
 Marketplace de skills, agents et mémoire pour Claude Code.
 
-Installe le plugin **memory** : index de code sémantique (zéro LLM) + mémoire épisodique par session, propulsé par FalkorDB + TEI en Docker local.
-
 ---
 
 ## Prérequis
 
 - Python ≥ 3.11
 - Docker Desktop (macOS / Windows) ou Docker Engine (Linux) avec `docker compose`
-- Claude Code ≥ dernière version stable
+- Claude Code
 
 ---
 
@@ -18,7 +16,7 @@ Installe le plugin **memory** : index de code sémantique (zéro LLM) + mémoire
 
 ```bash
 pip install -e .
-mem --help
+market --help
 ```
 
 ---
@@ -27,19 +25,19 @@ mem --help
 
 ```bash
 # Installer le plugin (une fois par machine)
-mem install --target claude --scope user
+market install --target `claude` --scope user
 
 # Vérifier que tout tourne
-mem doctor
+market doctor
 
 # Voir l'état d'ingestion du repo courant
-mem status
+market status
 
 # Déclencher une ingestion manuelle
-mem ingest --repo-path /chemin/vers/ton/repo
+market ingest --repo-path /chemin/vers/ton/repo
 
 # Désinstaller (réversible, lit le manifeste)
-mem uninstall --target claude --scope user
+market uninstall --target `claude` --scope user
 ```
 
 > Redémarre Claude Code après `install` pour activer les hooks.
@@ -51,5 +49,7 @@ mem uninstall --target claude --scope user
 ```bash
 cp .env.example .env
 ```
+
+Installe le plugin **memory** : index de code sémantique (zéro LLM) + mémoire épisodique par session, propulsé par FalkorDB en Docker local.
 
 Voir [`market-mem/README.md`](market-mem/README.md) pour le détail des variables et de l'architecture.

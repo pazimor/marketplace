@@ -2,7 +2,7 @@
 Codex install target (Phase 4).
 
 Codex has no hooks model — install = MCP server entry in config + AGENTS.md snippet.
-Manual ingest via `mem ingest` is required (no automatic SessionStart hook).
+Manual ingest via `market ingest` is required (no automatic SessionStart hook).
 
 Config location: ~/.codex/config.toml  (user scope)
                  <repo>/.codex/config.toml  (project scope — if Codex supports it)
@@ -23,8 +23,8 @@ _MCP_SERVER_URL  = "http://127.0.0.1:7333/mcp/sse"
 _MCP_SERVER_NAME = "memory"
 
 _AGENTS_MD_SECTION = """\
-<!-- mem-plugin:start -->
-## Memory & Code Search (mem plugin)
+<!-- market-plugin:start -->
+## Memory & Code Search (market plugin)
 
 This project uses a local memory MCP server.  Use these tools before starting work:
 
@@ -38,11 +38,11 @@ This project uses a local memory MCP server.  Use these tools before starting wo
 | `callers_of(symbol, group_id, depth)` | Who calls this symbol? |
 | `imports_of(file, group_id)` | Files imported by a file |
 
-**group_id**: run `mem status --repo-path .` to get your project's group_id.
+**group_id**: run `market status --repo-path .` to get your project's group_id.
 
-**First-time setup**: run `mem ingest --repo-path .` to index the codebase.
+**First-time setup**: run `market ingest --repo-path .` to index the codebase.
 (Claude Code users: this happens automatically at session start.)
-<!-- mem-plugin:end -->
+<!-- market-plugin:end -->
 """
 
 
@@ -94,12 +94,12 @@ def _toml_remove_mcp_entry(path: Path, server_name: str) -> None:
 # AGENTS.md helpers
 # ---------------------------------------------------------------------------
 
-_AGENTS_START = "<!-- mem-plugin:start -->"
-_AGENTS_END   = "<!-- mem-plugin:end -->"
+_AGENTS_START = "<!-- market-plugin:start -->"
+_AGENTS_END   = "<!-- market-plugin:end -->"
 
 
 def _upsert_agents_md(agents_path: Path) -> None:
-    """Insert or replace the mem-plugin section in AGENTS.md."""
+    """Insert or replace the market-plugin section in AGENTS.md."""
     agents_path.parent.mkdir(parents=True, exist_ok=True)
     existing = agents_path.read_text(encoding="utf-8") if agents_path.exists() else ""
 

@@ -1,5 +1,5 @@
 """
-`mem doctor` — health checks for the memory plugin stack.
+`market doctor` — health checks for the memory plugin stack.
 Checks: Docker, compose file, stack running, MCP reachable, FalkorDB/Ollama (via MCP).
 """
 from __future__ import annotations

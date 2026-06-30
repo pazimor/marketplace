@@ -1,7 +1,7 @@
 """
 Install manifest — records what was installed so uninstall is clean and reversible.
 
-Stored at: ~/.config/mem/manifest.json (user scope)
+Stored at: ~/.config/market/manifest.json (user scope)
            <repo>/.mcp-memory/manifest.json (project scope)
 """
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-_USER_MANIFEST = Path.home() / ".config" / "mem" / "manifest.json"
+_USER_MANIFEST = Path.home() / ".config" / "market" / "manifest.json"
 
 
 def _project_manifest(project_root: str) -> Path:

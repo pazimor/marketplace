@@ -3,11 +3,11 @@ Install / uninstall the memory plugin for Claude Code.
 
 What gets installed
 ───────────────────
-user scope   → ~/.claude/hooks/mem/*.py
+user scope   → ~/.claude/hooks/market/*.py
                ~/.claude/.mcp.json   (memory server entry merged in)
                ~/.claude/settings.json  (hooks merged in)
 
-project scope → <repo>/.claude/hooks/mem/*.py
+project scope → <repo>/.claude/hooks/market/*.py
                 <repo>/.mcp.json
                 <repo>/.claude/settings.json
 """
@@ -47,7 +47,7 @@ def _claude_dir(scope: str, project_root: str | None) -> Path:
 
 
 def _hooks_dst(scope: str, project_root: str | None) -> Path:
-    return _claude_dir(scope, project_root) / "hooks" / "mem"
+    return _claude_dir(scope, project_root) / "hooks" / "market"
 
 
 def install(scope: str, project_root: str | None) -> None:
