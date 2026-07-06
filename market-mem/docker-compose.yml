@@ -28,6 +28,8 @@ services:
       - "${REPOS_ROOT:-/Users}:${REPOS_ROOT:-/Users}:ro"
       # Persistent model cache — downloaded once, reused across restarts.
       - embed-models:/data/models
+      # Per-route MCP usage stats (.mcp_memory) — survives restarts.
+      - mcp-memory:/data/.mcp_memory
       # TLS cert + key (mkcert, locally-trusted) — read-only.
       - ./certs:/certs:ro
     environment:
@@ -55,3 +57,4 @@ networks:
 volumes:
   falkordb_data:
   embed-models:
+  mcp-memory:

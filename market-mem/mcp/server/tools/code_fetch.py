@@ -47,6 +47,11 @@ def code_fetch(node_id: str | None = None,
         sl = max(1, int(sl))
         el = min(len(lines), int(el))
         source = "\n".join(lines[sl - 1 : el])
+
+        if group_id:
+            from .stats import record_fetch
+            record_fetch(group_id, file_path, len(source))
+
         return {
             "path": file_path,
             "symbol": sym,

@@ -13,9 +13,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib import (
-    append_session_log, cwd_from_hook, group_id, mark_dirty,
+    append_session_log, cwd_from_hook, group_id, is_internal_session, mark_dirty,
     mcp_get, mcp_post, read_stdin_json,
 )
+
+# No-op for the headless haiku subprocess's own PostToolUse (see stop.py).
+if is_internal_session():
+    sys.exit(0)
 
 
 def main() -> None:
@@ -27,16 +31,11 @@ def main() -> None:
     if tool_name not in ("Write", "Edit", "MultiEdit"):
         sys.exit(0)
 
-    # Extract file path(s)
+    # Extract the file path — for all three tools (MultiEdit included) it
+    # lives at the top level of tool_input, never inside edits[].
     tool_input = payload.get("tool_input") or {}
-    paths: list[str] = []
-
-    if tool_name == "MultiEdit":
-        paths = [e.get("file_path", "") for e in tool_input.get("edits", [])]
-    else:
-        fp = tool_input.get("file_path") or tool_input.get("path") or ""
-        if fp:
-            paths = [fp]
+    fp = tool_input.get("file_path") or tool_input.get("path") or ""
+    paths: list[str] = [fp] if fp else []
 
     now_ts = int(time.time())
 

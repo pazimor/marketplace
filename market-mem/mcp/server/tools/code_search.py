@@ -78,4 +78,9 @@ def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
             {"id": nid, "now": now},
         )
 
-    return [meta[nid] | {"score": sc} for nid, sc in ranked if nid in meta]
+    out = [meta[nid] | {"score": sc} for nid, sc in ranked if nid in meta]
+
+    from .stats import record_search
+    record_search(group_id, out)
+
+    return out

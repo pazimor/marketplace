@@ -113,6 +113,8 @@ def call_haiku(repo_path: str, transcript_path: str, group_id: str) -> int:
         f"{delta}"
     )
 
+    from _lib import INTERNAL_SESSION_ENV
+
     try:
         result = subprocess.run(
             ["claude", "--model", HAIKU_MODEL, "-p", prompt],
@@ -120,6 +122,7 @@ def call_haiku(repo_path: str, transcript_path: str, group_id: str) -> int:
             text=True,
             timeout=AGENT_TIMEOUT,
             cwd=repo_path,
+            env={**os.environ, INTERNAL_SESSION_ENV: "1"},
         )
     except FileNotFoundError:
         print("[mem] 'claude' CLI not found — skipping episodic memory write", flush=True)

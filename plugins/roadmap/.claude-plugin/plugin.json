@@ -1,0 +1,5 @@
+{
+  "name": "roadmap",
+  "version": "0.1.0",
+  "description": "Structured roadmap (SPEC/MILESTONE/TASK in the graph), persistent backlog, task claims, retro loop and validation gates"
+}

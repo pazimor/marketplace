@@ -21,6 +21,37 @@ MEM_VERIFY = False
 DIRTY_MARKER_NAME   = ".mcp-memory/dirty"
 SESSION_LOG_NAME    = ".mcp-memory/session.log"
 
+# Set on the env of the headless `claude -p` haiku subprocess. Its own hook
+# invocations (SessionStart/PostToolUse/Stop/SessionEnd/SubagentStop) must
+# no-op, otherwise its Stop/SessionEnd would see the still-dirty marker and
+# recursively spawn another haiku subprocess (infinite loop / token burn).
+INTERNAL_SESSION_ENV = "MEM_HOOK_INTERNAL"
+
+
+def is_internal_session() -> bool:
+    return os.getenv(INTERNAL_SESSION_ENV) == "1"
+
+
+# Written by `market install` — survives the native plugin install, where this
+# file is copied under ~/.claude/plugins/ and repo-relative paths break.
+COMPOSE_POINTER = Path.home() / ".config" / "market" / "compose_path"
+
+
+def compose_file() -> Path | None:
+    """Locate market-mem/docker-compose.yml: env var → installer pointer → repo-relative fallback."""
+    env = os.getenv("MEM_COMPOSE_FILE")
+    if env and Path(env).exists():
+        return Path(env)
+    try:
+        if COMPOSE_POINTER.exists():
+            p = Path(COMPOSE_POINTER.read_text().strip())
+            if p.exists():
+                return p
+    except Exception:
+        pass
+    fallback = Path(__file__).parents[3] / "market-mem" / "docker-compose.yml"
+    return fallback if fallback.exists() else None
+
 
 def read_stdin_json() -> dict:
     try:
@@ -48,6 +79,39 @@ def group_id(repo_path: str) -> str:
     if not key:
         key = str(Path(repo_path).resolve())
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def ingest_allowed(repo_path: str) -> tuple[bool, str]:
+    """
+    Guard bulk ingest against unbounded / non-project trees.
+
+    Bulk ingest walks the whole tree over the Docker virtiofs share; pointing it
+    at a home directory or filesystem root floods Docker Desktop's file-sharing
+    service ("fs injecting event blocked for 60s") and crash-loops the VM.
+    We only ingest a real git work tree, and never the home dir / root.
+    """
+    try:
+        resolved = Path(repo_path).resolve()
+    except Exception:
+        return False, f"cannot resolve path: {repo_path!r}"
+
+    if resolved == Path.home():
+        return False, "refusing to ingest the home directory"
+    if resolved == Path(resolved.anchor):
+        return False, "refusing to ingest the filesystem root"
+
+    try:
+        inside = subprocess.check_output(
+            ["git", "-C", str(resolved), "rev-parse", "--is-inside-work-tree"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return False, f"not a git work tree: {resolved}"
+    if inside != "true":
+        return False, f"not a git work tree: {resolved}"
+
+    return True, ""
 
 
 def dirty_marker(repo_path: str) -> Path:

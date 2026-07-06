@@ -1,12 +1,13 @@
 """
-Install / uninstall the memory plugin for Claude Code.
+Install / uninstall marketplace plugins for Claude Code.
 
-Canonical install path — drives the NATIVE plugin system (so the plugin shows
+Canonical install path — drives the NATIVE plugin system (so plugins show
 up under "Personal plugins") instead of hand-patching settings.json:
 
   1. register the local marketplace   (claude plugin marketplace add <repo>)
-  2. install the memory plugin         (claude plugin install memory@marketplace)
-     → hooks (hooks/hooks.json) and MCP (.mcp.json) are auto-discovered by Claude
+  2. install the selected plugins      (claude plugin install <name>@marketplace)
+     → hooks (hooks/hooks.json), skills (skills/*/SKILL.md) and MCP (.mcp.json)
+       are auto-discovered by Claude Code
   3. configure the Claude Desktop bridge (claude_desktop_config.json, mcp-remote)
 
 No hooks are copied and settings.json is never touched, so install/uninstall is
@@ -22,10 +23,18 @@ from ..manifest import record_json_patch, get_manifest
 
 _REPO_ROOT       = Path(__file__).parents[2]
 _MARKETPLACE     = "marketplace"            # marketplace.json "name"
-_PLUGIN          = "memory"                 # plugin.json "name"
-_PLUGIN_ID       = f"{_PLUGIN}@{_MARKETPLACE}"
 _MCP_URL         = "https://127.0.0.1:7333/mcp/sse"
 _DESKTOP_CONFIG  = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+# Desktop bridge entry name — the shared MCP server, exposed by the memory plugin.
+_BRIDGE_NAME     = "memory"
+
+
+def available_plugins() -> list[str]:
+    """Plugin names declared in .claude-plugin/marketplace.json."""
+    catalogue = json.loads(
+        (_REPO_ROOT / ".claude-plugin" / "marketplace.json").read_text()
+    )
+    return [p["name"] for p in catalogue.get("plugins", [])]
 
 
 def _claude(*args: str) -> subprocess.CompletedProcess:
@@ -43,7 +52,9 @@ def _caroot() -> str:
 # install
 # ---------------------------------------------------------------------------
 
-def install(scope: str, project_root: str | None) -> None:
+def install(scope: str, project_root: str | None, plugins: list[str] | None = None) -> None:
+    plugins = plugins or ["memory"]
+
     # 1. Register the local marketplace (idempotent: update if already added).
     add = _claude("plugin", "marketplace", "add", str(_REPO_ROOT))
     if add.returncode != 0:
@@ -53,20 +64,23 @@ def install(scope: str, project_root: str | None) -> None:
                 f"marketplace add/update failed: {add.stderr.strip() or upd.stderr.strip()}"
             )
 
-    # 2. Install the plugin (idempotent: reinstall to pick up manifest changes).
-    if _is_installed():
-        _claude("plugin", "uninstall", _PLUGIN_ID)
-    inst = _claude("plugin", "install", _PLUGIN_ID)
-    if inst.returncode != 0:
-        raise RuntimeError(f"plugin install failed: {inst.stderr.strip()}")
+    # 2. Install each plugin (idempotent: reinstall to pick up manifest changes).
+    installed = _installed_plugins()
+    for name in plugins:
+        plugin_id = f"{name}@{_MARKETPLACE}"
+        if plugin_id in installed:
+            _claude("plugin", "uninstall", plugin_id)
+        inst = _claude("plugin", "install", plugin_id)
+        if inst.returncode != 0:
+            raise RuntimeError(f"plugin install failed ({name}): {inst.stderr.strip()}")
 
     # 3. Configure the Claude Desktop bridge (local server → mcp-remote over TLS).
     _configure_desktop_bridge(scope, project_root)
 
 
-def _is_installed() -> bool:
+def _installed_plugins() -> str:
     r = _claude("plugin", "list")
-    return _PLUGIN_ID in r.stdout
+    return r.stdout
 
 
 def _configure_desktop_bridge(scope: str, project_root: str | None) -> None:
@@ -80,19 +94,25 @@ def _configure_desktop_bridge(scope: str, project_root: str | None) -> None:
         "args": ["mcp-remote", _MCP_URL],
         "env": {"NODE_EXTRA_CA_CERTS": _caroot()},
     }
-    data["mcpServers"][_PLUGIN] = entry
+    data["mcpServers"][_BRIDGE_NAME] = entry
     _DESKTOP_CONFIG.write_text(json.dumps(data, indent=2))
-    record_json_patch(scope, str(_DESKTOP_CONFIG), ["mcpServers", _PLUGIN], entry, project_root)
+    record_json_patch(scope, str(_DESKTOP_CONFIG), ["mcpServers", _BRIDGE_NAME], entry, project_root)
 
 
 # ---------------------------------------------------------------------------
 # uninstall
 # ---------------------------------------------------------------------------
 
-def uninstall(scope: str, project_root: str | None) -> None:
-    if _is_installed():
-        _claude("plugin", "uninstall", _PLUGIN_ID)
-    _claude("plugin", "marketplace", "remove", _MARKETPLACE)
+def uninstall(scope: str, project_root: str | None, plugins: list[str] | None = None) -> None:
+    names = plugins or available_plugins()
+    installed = _installed_plugins()
+    for name in names:
+        plugin_id = f"{name}@{_MARKETPLACE}"
+        if plugin_id in installed:
+            _claude("plugin", "uninstall", plugin_id)
+    # Drop the marketplace registration only on a full uninstall.
+    if plugins is None:
+        _claude("plugin", "marketplace", "remove", _MARKETPLACE)
 
     # Remove recorded JSON patches (e.g. the Desktop bridge entry).
     manifest = get_manifest(scope, project_root)

@@ -15,7 +15,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _lib import cwd_from_hook, group_id, mcp_get, mcp_post, read_stdin_json
+from _lib import cwd_from_hook, group_id, is_internal_session, mcp_get, mcp_post, read_stdin_json
+
+# No-op for the headless haiku subprocess's own SubagentStop (see stop.py).
+if is_internal_session():
+    sys.exit(0)
 
 
 def _changed_files(repo: str) -> list[str]:
@@ -27,8 +31,15 @@ def _changed_files(repo: str) -> list[str]:
         )
         paths = []
         for line in out.splitlines():
-            status, _, rel = line.partition(" ")
-            rel = rel.strip()
+            # Porcelain v1: two status columns + space + path. Don't split on
+            # the first space — an unstaged status starts with one (" M foo").
+            if len(line) < 4:
+                continue
+            rel = line[3:]
+            # Renames/copies: "R  old -> new" — index the new path.
+            if line[0] in "RC" and " -> " in rel:
+                rel = rel.split(" -> ", 1)[1]
+            rel = rel.strip().strip('"')
             if rel:
                 paths.append(str(Path(repo) / rel))
         return paths

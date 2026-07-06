@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 A **Claude Code plugin marketplace** ("ECC"-style) that distributes:
-- **Skills and agents** for Claude Code (and eventually Codex)
+- **Skills and agents** for Claude Code
 - A **proprietary memory system** — a local RAG layer combining code indexing (bulk, zero-LLM) with episodic memory (written by haiku at session end)
 
 The repo is currently in the design/planning phase. `ROADMAP.md` and `DB_SCHEMA.md` are the authoritative specs; no code has been written yet.
@@ -64,7 +64,7 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 | `PostToolUse (Write/Edit)` | Re-embed changed symbols (hash-gated) + mark session "dirty" |
 | `Stop` (master) | Two-stage gate: if dirty → summon haiku on delta → `memory_add`; else exit immediately |
 | `SubagentStop` | Code-RAG reconcile only (git diff → upsert changed symbols); no haiku, no memory write |
-| `SessionEnd` | Flush if still dirty + `docker compose stop` (keep volume) |
+| `SessionEnd` | Flush if still dirty; the Docker stack stays up (shared across sessions — never stopped by hooks) |
 
 ### Retention policy
 - Episodic facts: invalidated after 30 days, hard-deleted after 30 days grace (60-day total window)
@@ -75,7 +75,7 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 - **Phase 1** — Bulk code ingestion + code RAG + MCP read tools ← _usable daily from here_
 - **Phase 2** — Episodic layer + haiku writer hook
 - **Phase 3** — Installer CLI (install/uninstall/doctor, Claude Code scope)
-- **Phase 4** — Codex adapter (MCP-only; hooks not supported by Codex)
+- **Phase 4** — ~~Codex adapter~~ dropped (episodic writes require haiku through the Claude Code account; Codex cannot drive that)
 - **Phase 5** — Code↔memory graph coupling (data-driven, only if anchor quality warrants it)
 
 ## Key decisions already made (do not re-open)

@@ -5,6 +5,8 @@ Endpoints
 ─────────
 GET  /health           liveness probe
 GET  /status/{gid}     ingest progress
+GET  /bootstrap/{gid}  session bootstrap (backlog + memories + stats)
+GET  /mcp-stats        per-route MCP usage (persisted to .mcp_memory)
 POST /ingest           trigger bulk ingest (SessionStart hook)
 POST /reindex          re-index one file  (PostToolUse hook)
 GET  /mcp/sse          MCP SSE stream (Claude Code)
@@ -37,6 +39,19 @@ from .tools.graph_tools import (
     imports_of as _imports_of,
     imported_by as _imported_by,
 )
+from .tools.overview import bootstrap as _bootstrap
+from .tools.overview import graph_overview as _graph_overview
+from .tools.route_stats import summary as _route_summary
+from .tools.route_stats import track as _track_route
+from .tools.roadmap import (
+    backlog_get as _backlog_get,
+    roadmap_apply as _roadmap_apply,
+    roadmap_export as _roadmap_export,
+    roadmap_impact as _roadmap_impact,
+    roadmap_lint as _roadmap_lint,
+    task_claim as _task_claim,
+    task_release as _task_release,
+)
 
 log = logging.getLogger(__name__)
 
@@ -49,14 +64,27 @@ _ingest_status: dict[str, dict] = {}
 mcp = FastMCP("memory")
 
 
-@mcp.tool()
+def tracked_tool(*args, **kwargs):
+    """`@mcp.tool()` + a per-route usage counter persisted to `.mcp_memory`.
+
+    Wraps the tool so every invocation is recorded (see tools/route_stats.py)
+    without touching the tool body or its generated schema."""
+    decorate = mcp.tool(*args, **kwargs)
+
+    def wrap(func):
+        return decorate(_track_route(func))
+
+    return wrap
+
+
+@tracked_tool()
 async def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
     """Search the code index by semantic + keyword similarity. Returns ranked chunks with path, symbol, signature, and line range."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _code_search, query, group_id, k)
 
 
-@mcp.tool()
+@tracked_tool()
 async def code_fetch(group_id: str, node_id: str = "", path: str = "", symbol: str = "") -> dict:
     """Fetch the exact source of a code chunk by node_id or path+symbol."""
     return _code_fetch(
@@ -67,39 +95,39 @@ async def code_fetch(group_id: str, node_id: str = "", path: str = "", symbol: s
     )
 
 
-@mcp.tool()
+@tracked_tool()
 async def memory_search(query: str, group_id: str, k: int = 10) -> list[dict]:
     """Search episodic memory (facts, decisions, conventions) by semantic + keyword similarity."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _memory_search, query, group_id, k)
 
 
-@mcp.tool()
+@tracked_tool()
 async def memory_query(query: str, group_id: str, symbol: str = "") -> list[dict]:
     """Targeted memory lookup, optionally filtered to facts anchored to a code symbol."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _memory_query, query, group_id, symbol or None)
 
 
-@mcp.tool()
+@tracked_tool()
 async def memory_immunize(id: str, group_id: str) -> dict:
     """Mark a memory fact as immune — never auto-purged or invalidated."""
     return _memory_immunize(id, group_id)
 
 
-@mcp.tool()
+@tracked_tool()
 async def memory_release(id: str, group_id: str) -> dict:
     """Remove immunity from a memory fact — subject to 30-day retention again."""
     return _memory_release(id, group_id)
 
 
-@mcp.tool()
+@tracked_tool()
 async def memory_extend(id: str, group_id: str, days: int) -> dict:
     """Push back the expiry of a memory fact by N days without making it immune."""
     return _memory_extend(id, group_id, days)
 
 
-@mcp.tool()
+@tracked_tool()
 async def memory_add(
     content: str,
     group_id: str,
@@ -121,10 +149,89 @@ async def memory_add(
 
 
 # ---------------------------------------------------------------------------
+# Roadmap layer — structured nodes, deterministic lint, task claims
+# ---------------------------------------------------------------------------
+
+@tracked_tool()
+async def graph_overview(group_id: str) -> dict:
+    """Orient yourself in the project graph in ONE call: node counts by type
+    (code / memory / roadmap), 5 latest memories, active milestones with
+    progress, and currently claimed tasks. Call this at the start of a task
+    instead of exploring the repo manually."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _graph_overview, group_id)
+
+
+@tracked_tool()
+async def roadmap_apply(group_id: str, ops: list[dict], author: str = "", worktree: str = "") -> dict:
+    """Apply a STRUCTURED roadmap patch (never rewrite documents). Ops:
+    {"op":"create","kind":"spec|milestone|task","fields":{"title":...,"description":...,"status":...,"type":...}} |
+    {"op":"update","id":"ROADMAP:TASK:3","fields":{...}} (field-by-field merge) |
+    {"op":"delete","id":...} |
+    {"op":"link","type":"DEPENDS_ON|IMPLEMENTS|PART_OF","from":id,"to":id} |
+    {"op":"unlink",...}.
+    Returns per-op results + a deterministic lint report. Claims are NOT
+    editable here — use task_claim/task_release."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _roadmap_apply, group_id, ops, author, worktree)
+
+
+@tracked_tool()
+async def roadmap_lint(group_id: str) -> dict:
+    """Deterministic roadmap validation: schema (status enums, titles),
+    cross-references, orphan milestones, circular DEPENDS_ON. Run after any
+    roadmap change; fix errors before continuing. No LLM re-read needed."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _roadmap_lint, group_id)
+
+
+@tracked_tool()
+async def task_claim(task_id: str, group_id: str, user: str, worktree: str = "") -> dict:
+    """Claim a task before working on it (multi-worktree safety). REFUSES if
+    another user/worktree already holds it — pick another task in that case.
+    Claiming a 'todo' task moves it to 'in_progress'."""
+    return _task_claim(task_id, group_id, user, worktree)
+
+
+@tracked_tool()
+async def task_release(task_id: str, group_id: str, user: str, done: bool = False) -> dict:
+    """Release a claimed task. done=true marks it done (only after its
+    Definition of Done is verified — see the task-verify skill); done=false
+    puts it back to 'todo'."""
+    return _task_release(task_id, group_id, user, done)
+
+
+@tracked_tool()
+async def backlog(group_id: str, include_done: bool = False) -> dict:
+    """Persistent backlog: tasks grouped by status (todo / in_progress /
+    blocked / done) with claims, milestones and dependencies. Call this to
+    resume exactly where the previous session stopped."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _backlog_get, group_id, include_done)
+
+
+@tracked_tool()
+async def roadmap_impact(node_id: str, group_id: str) -> dict:
+    """BEFORE changing a spec or task: what does it affect? Returns
+    implementing tasks and transitive dependents via graph traversal
+    (Cypher), not a document re-read."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _roadmap_impact, node_id, group_id)
+
+
+@tracked_tool()
+async def roadmap_export(group_id: str) -> str:
+    """Generate the roadmap markdown from the graph (deterministic). The
+    graph is the source of truth; never edit the generated markdown by hand."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _roadmap_export, group_id)
+
+
+# ---------------------------------------------------------------------------
 # Phase 5B — call graph tools
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@tracked_tool()
 async def impact_of(symbol: str, group_id: str, depth: int = 3) -> list[dict]:
     """Return CodeChunks reachable via CALLS edges from *symbol* (up to *depth* hops).
     Use this to find what code may be affected by a change to a given function."""
@@ -132,7 +239,7 @@ async def impact_of(symbol: str, group_id: str, depth: int = 3) -> list[dict]:
     return await loop.run_in_executor(None, _impact_of, symbol, group_id, depth)
 
 
-@mcp.tool()
+@tracked_tool()
 async def callers_of(symbol: str, group_id: str, depth: int = 1) -> list[dict]:
     """Return CodeChunks that call *symbol*, up to *depth* hops upstream.
     depth=1 returns direct callers only."""
@@ -140,14 +247,14 @@ async def callers_of(symbol: str, group_id: str, depth: int = 1) -> list[dict]:
     return await loop.run_in_executor(None, _callers_of, symbol, group_id, depth)
 
 
-@mcp.tool()
+@tracked_tool()
 async def imports_of(file: str, group_id: str) -> list[dict]:
     """Return files directly imported by *file* (IMPORTS edges from FileNode)."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _imports_of, file, group_id)
 
 
-@mcp.tool()
+@tracked_tool()
 async def imported_by(file: str, group_id: str) -> list[dict]:
     """Return files that import *file* (reverse IMPORTS traversal)."""
     loop = asyncio.get_running_loop()
@@ -263,6 +370,37 @@ async def trigger_reindex(req: ReindexRequest):
 @app.get("/status/{group_id}")
 def ingest_status(group_id: str):
     return _ingest_status.get(group_id, {"status": "unknown", "group_id": group_id})
+
+
+@app.get("/stats/{group_id}")
+def token_stats(group_id: str):
+    """Cumulative token-savings estimate for the code RAG (see tools/stats.py)."""
+    from .tools.stats import stats_get
+    try:
+        return stats_get(group_id)
+    except Exception as exc:
+        return {"group_id": group_id, "error": str(exc)}
+
+
+@app.get("/mcp-stats")
+def mcp_route_stats():
+    """Per-route MCP usage: how many routes exist, how many are used, and the
+    per-route call counts. Persisted to `.mcp_memory` (see tools/route_stats.py)."""
+    try:
+        return _route_summary()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.get("/bootstrap/{group_id}")
+async def session_bootstrap(group_id: str):
+    """Session bootstrap for the SessionStart hook: backlog + recent memories
+    + graph stats. Deterministic, no embedding call."""
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, _bootstrap, group_id)
+    except Exception as exc:
+        return {"error": str(exc), "group_id": group_id}
 
 
 

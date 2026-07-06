@@ -6,7 +6,7 @@ import time
 from .config import config
 from .db import get_graph
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Executed once per new graph.  FalkorDB silently ignores duplicate index creation.
 _INIT_QUERIES = [
@@ -30,6 +30,12 @@ _INIT_QUERIES = [
     "CREATE INDEX FOR (f:FileNode) ON (f.path)",
     "CREATE INDEX FOR (f:FileNode) ON (f.group_id)",
     "CREATE INDEX FOR (c:CodeChunk) ON (c.symbol)",
+    # Roadmap layer (Spec / Milestone / Task)
+    "CREATE INDEX FOR (s:Spec) ON (s.id)",
+    "CREATE INDEX FOR (m:Milestone) ON (m.id)",
+    "CREATE INDEX FOR (t:Task) ON (t.id)",
+    "CREATE INDEX FOR (t:Task) ON (t.status)",
+    "CREATE INDEX FOR (t:Task) ON (t.claimed_by)",
 ]
 
 

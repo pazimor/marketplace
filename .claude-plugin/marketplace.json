@@ -11,6 +11,11 @@
       "name": "memory",
       "source": "./plugins/memory",
       "description": "Persistent code index (bulk, zero-LLM) + episodic memory (haiku) via FalkorDB + Ollama"
+    },
+    {
+      "name": "roadmap",
+      "source": "./plugins/roadmap",
+      "description": "Structured roadmap in the project graph — persistent backlog, task claims, deterministic lint, retro loop and validation gates"
     }
   ]
 }

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -286,22 +287,32 @@ def _walk_repo(repo_path: str) -> Iterator[tuple[str, str]]:
     spec = pathspec.PathSpec.from_lines("gitwildmatch", gitignore_file.read_text().splitlines()
                                          if gitignore_file.exists() else [])
 
-    for p in root.rglob("*"):
-        if p.is_dir():
-            continue
-        if any(part in _SKIP_DIRS for part in p.parts):
-            continue
-        rel = p.relative_to(root)
-        if spec.match_file(str(rel)):
-            continue
-        ext = p.suffix.lstrip(".")
-        if _get_parser(ext) is None:
-            continue
-        if any(str(p).endswith(s) for s in _SKIP_EXTENSIONS):
-            continue
-        if p.stat().st_size > _MAX_FILE_BYTES:
-            continue
-        yield str(p), ext
+    # os.walk lets us prune skip-dirs *before* descending (so we never stat
+    # their contents) and swallow access errors on unreadable trees such as
+    # macOS's ~/.Trash, which raises PermissionError even on is_dir().
+    def _on_error(exc: OSError) -> None:
+        log.debug("skipping unreadable path during walk: %s", exc)
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_on_error):
+        # Prune skip-dirs in place so os.walk does not descend into them.
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        for name in filenames:
+            p = Path(dirpath) / name
+            rel = p.relative_to(root)
+            if spec.match_file(str(rel)):
+                continue
+            ext = p.suffix.lstrip(".")
+            if _get_parser(ext) is None:
+                continue
+            if any(str(p).endswith(s) for s in _SKIP_EXTENSIONS):
+                continue
+            try:
+                if p.stat().st_size > _MAX_FILE_BYTES:
+                    continue
+            except OSError as exc:
+                log.debug("skipping unstattable file: %s", exc)
+                continue
+            yield str(p), ext
 
 
 # ---------------------------------------------------------------------------
@@ -439,9 +450,14 @@ def reindex_file(group_id: str, file_path: str) -> dict:
     Only re-embeds chunks whose content_hash changed.
     """
     ensure_schema(group_id)
-    ext = Path(file_path).suffix.lstrip(".")
+    p = Path(file_path)
+    # A directory can be handed to us (e.g. Write/Edit on a path that is a
+    # folder): nothing to index, skip silently instead of 500-ing.
+    if p.is_dir():
+        return {"skipped": True, "reason": "directory"}
+    ext = p.suffix.lstrip(".")
     try:
-        code = Path(file_path).read_bytes()
+        code = p.read_bytes()
     except FileNotFoundError:
         # File was deleted — mark all its chunks invalid
         g = get_graph(group_id)

@@ -43,8 +43,10 @@ def memory_add(
     )
     if dup.result_set:
         top_id, top_score = dup.result_set[0]
-        if top_score >= _DEDUP_THRESHOLD:
-            return {"status": "duplicate", "existing_id": top_id, "score": top_score}
+        # queryNodes yields a cosine DISTANCE (0 = identical), not a similarity.
+        similarity = 1.0 - top_score
+        if similarity >= _DEDUP_THRESHOLD:
+            return {"status": "duplicate", "existing_id": top_id, "score": similarity}
 
     mid = str(uuid.uuid4())
     vf = valid_from if valid_from is not None else now
@@ -96,28 +98,44 @@ def memory_add(
     return {"status": "created", "id": mid}
 
 
-def memory_immunize(memory_id: str, group_id: str) -> dict:
+def _set_immune(memory_id: str, group_id: str, immune: bool) -> dict:
     g = get_graph(group_id)
-    g.query("MATCH (m:MemoryEpisode {id: $id}) SET m.immune = true", {"id": memory_id})
-    return {"status": "ok", "id": memory_id, "immune": True}
+    res = g.query(
+        "MATCH (m:MemoryEpisode {id: $id}) SET m.immune = $immune RETURN count(m)",
+        {"id": memory_id, "immune": immune},
+    )
+    matched = res.result_set[0][0] if res.result_set else 0
+    if not matched:
+        return {"status": "error", "error": f"memory not found: {memory_id}"}
+    return {"status": "ok", "id": memory_id, "immune": immune}
+
+
+def memory_immunize(memory_id: str, group_id: str) -> dict:
+    return _set_immune(memory_id, group_id, True)
 
 
 def memory_release(memory_id: str, group_id: str) -> dict:
-    g = get_graph(group_id)
-    g.query("MATCH (m:MemoryEpisode {id: $id}) SET m.immune = false", {"id": memory_id})
-    return {"status": "ok", "id": memory_id, "immune": False}
+    return _set_immune(memory_id, group_id, False)
 
 
 def memory_extend(memory_id: str, group_id: str, days: int) -> dict:
+    if days <= 0:
+        return {"status": "error",
+                "error": f"days must be positive (got {days}); "
+                         "memory_extend only pushes expiry back"}
     g = get_graph(group_id)
     extra_ms = days * 24 * 3_600_000
-    g.query(
+    res = g.query(
         """
         MATCH (m:MemoryEpisode {id: $id})
         SET m.created_at  = m.created_at  + $ms,
             m.invalid_at  = CASE WHEN m.invalid_at IS NOT NULL
                                  THEN m.invalid_at + $ms ELSE null END
+        RETURN count(m)
         """,
         {"id": memory_id, "ms": extra_ms},
     )
+    matched = res.result_set[0][0] if res.result_set else 0
+    if not matched:
+        return {"status": "error", "error": f"memory not found: {memory_id}"}
     return {"status": "ok", "id": memory_id, "extended_days": days}

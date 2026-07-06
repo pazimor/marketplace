@@ -3,11 +3,14 @@ market — marketplace installer CLI.
 
 Commands
 ────────
-market install   --target claude|codex|both  --scope user|project  [--project-root PATH]
-market uninstall --target claude|codex|both  --scope user|project  [--project-root PATH]
+market install   [PLUGINS]...  --scope user|project  [--project-root PATH]
+                 PLUGINS: plugin folder names (e.g. `roadmap`), `full` for everything,
+                 or nothing for the MCP core only (memory plugin + Docker stack).
+                 The MCP stack is always deployed.
+market uninstall [PLUGINS]...  --scope user|project  [--project-root PATH]
 market status
 market doctor
-market ingest    --repo-path PATH  (manual trigger, useful for Codex or first-time setup)
+market ingest    --repo-path PATH  (manual trigger, useful for first-time setup)
 """
 from __future__ import annotations
 
@@ -23,6 +26,16 @@ _COMPOSE_FILE = Path(__file__).parents[1] / "market-mem" / "docker-compose.yml"
 _ENV_FILE     = Path(__file__).parents[1] / "market-mem" / ".env"
 _PLUGIN_ROOT  = Path(__file__).parents[1] / "plugins" / "memory"
 _CERTS_DIR    = _COMPOSE_FILE.parent / "certs"
+
+# Read by the plugin hooks (_lib.compose_file) — the native plugin install
+# copies hooks under ~/.claude/plugins/, so they can't rely on repo-relative
+# paths to find the Docker stack.
+_COMPOSE_POINTER = Path.home() / ".config" / "market" / "compose_path"
+
+
+def _write_compose_pointer() -> None:
+    _COMPOSE_POINTER.parent.mkdir(parents=True, exist_ok=True)
+    _COMPOSE_POINTER.write_text(str(_COMPOSE_FILE.resolve()) + "\n")
 
 
 def _setup_tls() -> None:
@@ -91,29 +104,52 @@ def main():
 # install
 # ---------------------------------------------------------------------------
 
-@main.command()
-@click.option("--target", type=click.Choice(["claude", "codex", "both"]), default="claude", show_default=True)
-@click.option("--scope",  type=click.Choice(["user", "project"]),          default="user",   show_default=True)
-@click.option("--project-root", default=None, help="Repo root for --scope project (defaults to cwd).")
-def install(target: str, scope: str, project_root: str | None):
-    """Install the memory plugin for Claude Code and/or Codex."""
-    project_root = project_root or os.getcwd()
-    targets = ["claude", "codex"] if target == "both" else [target]
+def _resolve_plugins(plugins: tuple[str, ...]) -> list[str]:
+    """Resolve the plugin selection: names, `full`, or default (MCP core only).
 
-    for t in targets:
-        click.echo(f"Installing for {t} ({scope} scope)…")
-        try:
-            if t == "claude":
-                from .targets.claude import install as _install
-            else:
-                from .targets.codex import install as _install
-            _install(scope, project_root if scope == "project" else None)
-            click.echo(f"  ✓ {t} done")
-        except NotImplementedError as e:
-            click.echo(f"  ✗ {e}", err=True)
-        except Exception as e:
-            click.echo(f"  ✗ {e}", err=True)
-            sys.exit(1)
+    The memory plugin IS the MCP (hooks + .mcp.json) — it is always included,
+    so the MCP is deployed by default whatever the selection.
+    """
+    from .targets.claude import available_plugins
+
+    catalogue = available_plugins()
+    if not plugins:
+        selected = ["memory"]
+    elif "full" in plugins:
+        selected = list(catalogue)
+    else:
+        unknown = [p for p in plugins if p not in catalogue]
+        if unknown:
+            raise click.BadParameter(
+                f"unknown plugin(s): {', '.join(unknown)} — available: {', '.join(catalogue)} (or `full`)"
+            )
+        selected = list(plugins)
+    if "memory" not in selected:
+        selected.insert(0, "memory")
+    return selected
+
+
+@main.command()
+@click.argument("plugins", nargs=-1)
+@click.option("--scope",  type=click.Choice(["user", "project"]), default="user", show_default=True)
+@click.option("--project-root", default=None, help="Repo root for --scope project (defaults to cwd).")
+def install(plugins: tuple[str, ...], scope: str, project_root: str | None):
+    """Install marketplace plugins (PLUGINS: names, `full`, or empty for MCP core only)."""
+    project_root = project_root or os.getcwd()
+    selected = _resolve_plugins(plugins)
+    click.echo(f"Plugins: {', '.join(selected)}")
+
+    click.echo(f"Installing for Claude Code ({scope} scope)…")
+    try:
+        from .targets.claude import install as _install
+        _install(scope, project_root if scope == "project" else None, selected)
+        click.echo("  ✓ done")
+    except Exception as e:
+        click.echo(f"  ✗ {e}", err=True)
+        sys.exit(1)
+
+    # Tell the installed hooks where the Docker stack lives.
+    _write_compose_pointer()
 
     # Set up local TLS (mkcert CA + server cert) before starting the stack.
     click.echo("Setting up TLS (mkcert)…")
@@ -135,30 +171,25 @@ def install(target: str, scope: str, project_root: str | None):
 # ---------------------------------------------------------------------------
 
 @main.command()
-@click.option("--target", type=click.Choice(["claude", "codex", "both"]), default="claude", show_default=True)
-@click.option("--scope",  type=click.Choice(["user", "project"]),          default="user",   show_default=True)
+@click.argument("plugins", nargs=-1)
+@click.option("--scope",  type=click.Choice(["user", "project"]), default="user", show_default=True)
 @click.option("--project-root", default=None)
-def uninstall(target: str, scope: str, project_root: str | None):
-    """Remove the memory plugin (reads manifest — reversible)."""
+def uninstall(plugins: tuple[str, ...], scope: str, project_root: str | None):
+    """Remove plugins (PLUGINS: names, or empty for everything — reads manifest, reversible)."""
     project_root = project_root or os.getcwd()
-    targets = ["claude", "codex"] if target == "both" else [target]
+    selection = list(plugins) or None  # None = full uninstall
 
-    for t in targets:
-        click.echo(f"Uninstalling from {t} ({scope} scope)…")
-        try:
-            if t == "claude":
-                from .targets.claude import uninstall as _uninstall
-            else:
-                from .targets.codex import uninstall as _uninstall
-            _uninstall(scope, project_root if scope == "project" else None)
-            click.echo(f"  ✓ {t} done")
-        except NotImplementedError as e:
-            click.echo(f"  ✗ {e}", err=True)
-        except Exception as e:
-            click.echo(f"  ✗ {e}", err=True)
+    click.echo(f"Uninstalling from Claude Code ({scope} scope)…")
+    try:
+        from .targets.claude import uninstall as _uninstall
+        _uninstall(scope, project_root if scope == "project" else None, selection)
+        click.echo("  ✓ done")
+    except Exception as e:
+        click.echo(f"  ✗ {e}", err=True)
 
-    from .manifest import clear_manifest
-    clear_manifest(scope, project_root if scope == "project" else None)
+    if selection is None:
+        from .manifest import clear_manifest
+        clear_manifest(scope, project_root if scope == "project" else None)
     click.echo("Done.  Docker stack left running (use `docker compose stop` to shut down).")
 
 
@@ -238,7 +269,7 @@ def doctor():
 @main.command()
 @click.option("--repo-path", default=None, help="Path to the repository to ingest (default: cwd).")
 def ingest(repo_path: str | None):
-    """Manually trigger a full code ingest (useful for first-time setup or Codex)."""
+    """Manually trigger a full code ingest (useful for first-time setup)."""
     import hashlib, subprocess as sp
 
     repo_path = repo_path or os.getcwd()
