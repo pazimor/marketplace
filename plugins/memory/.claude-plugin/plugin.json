@@ -1,5 +1,5 @@
 {
   "name": "memory",
-  "version": "0.1.0",
-  "description": "Persistent code index (bulk, zero-LLM) + episodic memory (haiku)"
+  "version": "0.3.0",
+  "description": "Project graph for Claude Code: code index (bulk, zero-LLM), episodic memory distilled from past transcripts (extractor haiku → arbiter sonnet), structured roadmap (backlog, task claims, DoD, lint), and the orchestrator/worker/roadmapper agents"
 }

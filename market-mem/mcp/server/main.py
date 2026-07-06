@@ -30,6 +30,7 @@ from .tools.code_search import code_search as _code_search
 from .tools.memory_search import memory_query as _memory_query
 from .tools.memory_search import memory_search as _memory_search
 from .tools.memory_write import memory_add as _memory_add
+from .tools.memory_write import memory_delete as _memory_delete
 from .tools.memory_write import memory_extend as _memory_extend
 from .tools.memory_write import memory_immunize as _memory_immunize
 from .tools.memory_write import memory_release as _memory_release
@@ -40,6 +41,8 @@ from .tools.graph_tools import (
     imported_by as _imported_by,
 )
 from .tools.overview import bootstrap as _bootstrap
+from .tools.sessions import session_mark_processed as _session_mark_processed
+from .tools.sessions import sessions_processed as _sessions_processed
 from .tools.overview import graph_overview as _graph_overview
 from .tools.route_stats import summary as _route_summary
 from .tools.route_stats import track as _track_route
@@ -50,6 +53,7 @@ from .tools.roadmap import (
     roadmap_impact as _roadmap_impact,
     roadmap_lint as _roadmap_lint,
     task_claim as _task_claim,
+    task_link_code as _task_link_code,
     task_release as _task_release,
 )
 
@@ -134,18 +138,31 @@ async def memory_add(
     type: str = "fact",
     anchor: str = "",
     valid_from: int = 0,
+    kind: str = "episodic",
 ) -> dict:
-    """[haiku only] Persist an episodic fact. Dedup-checked before insert."""
+    """[distiller only] Persist a fact. Dedup-checked before insert.
+    kind: 'episodic' (30-day retention) | 'preference' | 'workflow'
+    (user habits/conventions — exempt from time-based purge)."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None,
-        _memory_add,
-        content,
-        group_id,
-        type,
-        anchor or None,
-        valid_from or None,
+        lambda: _memory_add(
+            content,
+            group_id,
+            type,
+            anchor or None,
+            valid_from or None,
+            kind=kind,
+            source="distiller",
+        ),
     )
+
+
+@tracked_tool()
+async def memory_delete(id: str, group_id: str) -> dict:
+    """[distiller only] Hard-delete one fact — used when merging duplicates
+    or retracting a fact contradicted by newer evidence."""
+    return _memory_delete(id, group_id)
 
 
 # ---------------------------------------------------------------------------
@@ -165,11 +182,13 @@ async def graph_overview(group_id: str) -> dict:
 @tracked_tool()
 async def roadmap_apply(group_id: str, ops: list[dict], author: str = "", worktree: str = "") -> dict:
     """Apply a STRUCTURED roadmap patch (never rewrite documents). Ops:
-    {"op":"create","kind":"spec|milestone|task","fields":{"title":...,"description":...,"status":...,"type":...}} |
+    {"op":"create","kind":"spec|milestone|task|canon","fields":{"title":...,"description":...,"status":...,"type":...,"dod":...,"due":...}} |
     {"op":"update","id":"ROADMAP:TASK:3","fields":{...}} (field-by-field merge) |
     {"op":"delete","id":...} |
-    {"op":"link","type":"DEPENDS_ON|IMPLEMENTS|PART_OF","from":id,"to":id} |
+    {"op":"link","type":"DEPENDS_ON|IMPLEMENTS|PART_OF|DETAILS","from":id,"to":id} |
     {"op":"unlink",...}.
+    'canon' nodes carry implementation detail (Canon Driven Development) and
+    DETAILS-link to a task or spec; task_claim bundles them for dispatch.
     Returns per-op results + a deterministic lint report. Claims are NOT
     editable here — use task_claim/task_release."""
     loop = asyncio.get_running_loop()
@@ -189,7 +208,9 @@ async def roadmap_lint(group_id: str) -> dict:
 async def task_claim(task_id: str, group_id: str, user: str, worktree: str = "") -> dict:
     """Claim a task before working on it (multi-worktree safety). REFUSES if
     another user/worktree already holds it — pick another task in that case.
-    Claiming a 'todo' task moves it to 'in_progress'."""
+    Claiming a 'todo' task moves it to 'in_progress'. The result includes the
+    dispatch-ready CDD bundle: task fields (title/description/type/dod/due),
+    attached canon nodes, and depends_on."""
     return _task_claim(task_id, group_id, user, worktree)
 
 
@@ -199,6 +220,16 @@ async def task_release(task_id: str, group_id: str, user: str, done: bool = Fals
     Definition of Done is verified — see the task-verify skill); done=false
     puts it back to 'todo'."""
     return _task_release(task_id, group_id, user, done)
+
+
+@tracked_tool()
+async def task_link_code(task_id: str, group_id: str, symbols: list[str]) -> dict:
+    """AFTER a task is done: link it to the code it produced
+    ((:Task)-[:PRODUCED]->(:CodeChunk)) from the symbols reported by the
+    worker (module.func). Symbols absent from the code index are returned in
+    `missing` — retry them after the next reindex."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _task_link_code, task_id, group_id, symbols)
 
 
 @tracked_tool()
@@ -390,6 +421,35 @@ def mcp_route_stats():
         return _route_summary()
     except Exception as exc:
         return {"error": str(exc)}
+
+
+class SessionProcessedRequest(BaseModel):
+    group_id: str
+    session_id: str
+    status: str = "done"
+    facts_written: int = 0
+
+
+@app.get("/sessions/{group_id}")
+async def processed_sessions(group_id: str):
+    """Distillation ledger: which session transcripts were already processed."""
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, _sessions_processed, group_id)
+    except Exception as exc:
+        return {"error": str(exc), "group_id": group_id}
+
+
+@app.post("/sessions/processed")
+async def mark_session_processed(req: SessionProcessedRequest):
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(
+            None, _session_mark_processed,
+            req.group_id, req.session_id, req.status, req.facts_written,
+        )
+    except Exception as exc:
+        return {"error": str(exc), "group_id": req.group_id}
 
 
 @app.get("/bootstrap/{group_id}")

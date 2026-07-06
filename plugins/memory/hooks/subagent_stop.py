@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib import cwd_from_hook, group_id, is_internal_session, mcp_get, mcp_post, read_stdin_json
 
-# No-op for the headless haiku subprocess's own SubagentStop (see stop.py).
+# No-op for the headless distiller subprocesses' own SubagentStop (see _distill.py).
 if is_internal_session():
     sys.exit(0)
 

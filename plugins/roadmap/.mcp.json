@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "memory": {
-      "type": "sse",
-      "url": "https://127.0.0.1:7333/mcp/sse"
-    }
-  }
-}

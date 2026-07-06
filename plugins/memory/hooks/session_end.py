@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-SessionEnd hook — flush safety net.
+SessionEnd hook — bookkeeping only.
 
-If the dirty marker is still set (Stop hook was skipped / stalled),
-call haiku here as a last resort.
+Episodic memory is no longer written here: the session transcript is durable
+on disk and will be distilled by the NEXT SessionStart (see _distill.py).
+This hook just snapshots token stats and rotates the session log.
 
 The Docker stack is intentionally NOT stopped here: it is shared by all
 sessions on the machine, and stopping it would kill the MCP server out
@@ -18,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib import (
-    clear_dirty, clear_session_log, cwd_from_hook, group_id,
-    is_dirty, is_internal_session, mcp_get, read_stdin_json,
+    clear_session_log, cwd_from_hook, group_id, is_internal_session,
+    mcp_get, read_stdin_json,
 )
 
 _STATS_KEYS = ("search_calls", "fetch_calls", "baseline_tokens",
@@ -54,8 +55,8 @@ def write_token_stats(repo: str, gid: str) -> None:
         with open(out_file.with_suffix(".log"), "a") as f:
             f.write(json.dumps({"at": now, **last_session}) + "\n")
 
-# Prevent infinite loop: no-op for the headless haiku subprocess's own
-# SessionEnd (see stop.py for the full explanation).
+
+# No-op for the headless distiller subprocesses' own SessionEnd.
 if is_internal_session():
     sys.exit(0)
 
@@ -65,22 +66,7 @@ def main() -> None:
     repo    = cwd_from_hook(payload)
 
     write_token_stats(repo, group_id(repo))
-
-    if is_dirty(repo):
-        # Guard: skip haiku if stop_hook_active (a payload field, not an env
-        # var — shouldn't happen here but be safe)
-        if not payload.get("stop_hook_active"):
-            # Clear before spawning: haiku is a full nested session, and its
-            # own SessionEnd/Stop must see dirty=false to avoid recursing.
-            clear_dirty(repo)
-
-            from _haiku import call_haiku
-            transcript_path = payload.get("transcript_path", "")
-            call_haiku(repo, transcript_path, group_id(repo))
-
-        clear_dirty(repo)
-        clear_session_log(repo)
-
+    clear_session_log(repo)
     sys.exit(0)
 
 

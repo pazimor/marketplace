@@ -16,6 +16,12 @@ from ..schema import ensure_schema
 _DEDUP_THRESHOLD = 0.92
 _RETENTION_MS = 30 * 24 * 3_600_000   # 30 days
 
+# Memory kinds. "episodic" follows the standard 30-day retention window;
+# "preference" and "workflow" describe the user (habits, conventions,
+# recurring workflows) and are exempt from time-based purge — they only
+# disappear via memory_delete or an arbiter merge.
+VALID_KINDS = {"episodic", "preference", "workflow"}
+
 
 def memory_add(
     content: str,
@@ -23,7 +29,12 @@ def memory_add(
     fact_type: str = "fact",
     anchor: str | None = None,
     valid_from: int | None = None,
+    kind: str = "episodic",
+    source: str = "haiku",
 ) -> dict:
+    if kind not in VALID_KINDS:
+        return {"status": "error",
+                "error": f"invalid kind '{kind}' (allowed: {sorted(VALID_KINDS)})"}
     ensure_schema(group_id)
     g = get_graph(group_id)
     now = int(time.time() * 1000)
@@ -57,11 +68,12 @@ def memory_add(
             group_id:         $gid,
             content:          $content,
             type:             $type,
+            kind:             $kind,
             emb:              vecf32($emb),
             emb_model:        $model,
             emb_dim:          $dim,
             anchor:           $anchor,
-            source:           'haiku',
+            source:           $source,
             valid_from:       $vf,
             invalid_at:       null,
             immune:           false,
@@ -75,6 +87,8 @@ def memory_add(
             "gid": group_id,
             "content": content,
             "type": fact_type,
+            "kind": kind,
+            "source": source,
             "emb": vec,
             "model": config.MEMORY_EMBED_MODEL,
             "dim": len(vec),
@@ -96,6 +110,20 @@ def memory_add(
         )
 
     return {"status": "created", "id": mid}
+
+
+def memory_delete(memory_id: str, group_id: str) -> dict:
+    """Hard-delete one fact. Used by the arbiter to merge duplicates
+    (delete the stale fact, memory_add the consolidated one)."""
+    g = get_graph(group_id)
+    res = g.query(
+        "MATCH (m:MemoryEpisode {id: $id}) DETACH DELETE m RETURN count(m)",
+        {"id": memory_id},
+    )
+    matched = res.result_set[0][0] if res.result_set else 0
+    if not matched:
+        return {"status": "error", "error": f"memory not found: {memory_id}"}
+    return {"status": "deleted", "id": memory_id}
 
 
 def _set_immune(memory_id: str, group_id: str, immune: bool) -> dict:

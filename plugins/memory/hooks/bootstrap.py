@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """
-Enriched SessionStart bootstrap (roadmap plugin).
+Enriched SessionStart bootstrap.
 
 Prints a compact (~1-2k token) context block to stdout, which Claude Code
 injects into the session: backlog state + recent memories + the 3-axes
 reminder + identity to use for task_claim. Deterministic — one GET on the
 memory MCP server, no LLM.
 
-Self-contained: does not depend on the memory plugin being installed.
-When the memory plugin IS installed, its own SessionStart boots the Docker
-stack concurrently with this hook — so we poll the server for a while
-instead of failing on the first attempt (startup race). Without the memory
-plugin there is nothing booting the stack: one quick attempt, then degrade
-to the static reminder.
+Runs concurrently with session_start.py (same plugin), which boots the
+Docker stack — so we poll the server for a while instead of failing on the
+first attempt (startup race), then degrade to the static reminder.
 """
 from __future__ import annotations
 

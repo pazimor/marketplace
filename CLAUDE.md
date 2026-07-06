@@ -15,18 +15,18 @@ The repo is currently in the design/planning phase. `ROADMAP.md` and `DB_SCHEMA.
 ### Plugin layout (target structure)
 ```
 marketplace/
-├── .claude-plugin/marketplace.json   # plugin catalogue
+├── .claude-plugin/marketplace.json   # plugin catalogue (ONE plugin: memory)
 ├── plugins/
-│   ├── memory/                       # memory system plugin
-│   │   ├── .claude-plugin/plugin.json
-│   │   ├── hooks/hooks.json
-│   │   ├── agents/                   # haiku sub-agent (episodic writer)
-│   │   ├── skills/
-│   │   └── .mcp.json
-│   ├── skills-pack/
-│   └── agents-pack/
+│   └── memory/                       # the single plugin — everything ships together
+│       ├── .claude-plugin/plugin.json
+│       ├── hooks/                    # session_start (docker+ingest+distiller), bootstrap (context injection), post_tool_use, subagent_stop, session_end
+│       │   ├── prompts/              # extractor.md / arbiter.md (distiller prompts)
+│       │   └── tests/                # offline distiller tests + real-token smoke script
+│       ├── agents/                   # orchestrator, worker, worker-small, roadmapper
+│       ├── skills/                   # graph-usage, roadmap-maker, task-verify, retro
+│       └── .mcp.json
 ├── installer/                        # CLI: install/uninstall/status/doctor
-└── docker/                           # shared FalkorDB + Ollama + MCP server
+└── market-mem/                       # shared FalkorDB + MCP server (Docker)
 ```
 
 ### Infrastructure (Docker)
@@ -40,8 +40,16 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 ### Memory system — two layers in one FalkorDB graph
 | Layer | Node label | How written | LLM cost |
 |---|---|---|---|
-| Code index | `:CodeChunk` | Bulk at `SessionStart`, AST → Ollama embed | Zero LLM |
-| Episodic memory | `:MemoryEpisode` | `haiku` at hook `Stop` (delta only) | haiku only |
+| Code index | `:CodeChunk` | Bulk at `SessionStart`, AST → embed | Zero LLM |
+| Episodic memory | `:MemoryEpisode` | Distiller at `SessionStart`: past transcripts → extractor (haiku) → arbiter (sonnet) | haiku + sonnet, once per past session |
+
+**Distillation pipeline** (`plugins/memory/hooks/_distill.py`):
+- Past session transcripts (`~/.claude/projects/<proj>/*.jsonl`) are distilled at the NEXT SessionStart — durable, replayable, captures crashed sessions
+- Stage A extractor (haiku, `hooks/prompts/extractor.md`): transcript → candidate facts JSON, no writes
+- Stage B arbiter (sonnet, `hooks/prompts/arbiter.md`): memory_search + decide ADD / MERGE / DISCARD via the MCP write tools — this is the dedup / contradiction gate
+- Ledger `:ProcessedSession` in the graph (`GET /sessions/{gid}`, `POST /sessions/processed`) — idempotent; `failed` is retried, `done|skipped|empty` are final
+- Background (detached process) by default; synchronous when `MEM_DISTILL_SYNC=1` or `distill_sync: true` in `~/.config/market/settings.json`
+- Memory `kind`: `episodic` (30-day retention) vs `preference`/`workflow` (user habits — never time-purged; the arbiter only promotes them after recurrence)
 
 **Key invariants:**
 - Code is stored **by reference** (`path + [start_line, end_line]`), never copied into the DB
@@ -55,19 +63,21 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 
 **Safe writes (exposed to master):** `memory_immunize`, `memory_release`, `memory_extend`
 
-**Hidden writes (haiku/debug only):** `memory_add`, `memory_delete`, `code_add`, `code_edit`, `code_delete`
+**Hidden writes (distiller/debug only):** `memory_add`, `memory_delete`, `code_add`, `code_edit`, `code_delete`
 
 ### Hook design
 | Hook | Action |
 |---|---|
-| `SessionStart` | `docker compose up` → embedding coherence check → bulk ingest (background, non-blocking) |
-| `PostToolUse (Write/Edit)` | Re-embed changed symbols (hash-gated) + mark session "dirty" |
-| `Stop` (master) | Two-stage gate: if dirty → summon haiku on delta → `memory_add`; else exit immediately |
-| `SubagentStop` | Code-RAG reconcile only (git diff → upsert changed symbols); no haiku, no memory write |
-| `SessionEnd` | Flush if still dirty; the Docker stack stays up (shared across sessions — never stopped by hooks) |
+| `SessionStart` | `docker compose up` → health → bulk ingest (background) → distill past transcripts (background unless `MEM_DISTILL_SYNC=1`) |
+| `PostToolUse (Write/Edit)` | Re-embed changed symbols (hash-gated) + session.log debug trail |
+| `SubagentStop` | Code-RAG reconcile only (git diff → upsert changed symbols); no memory write |
+| `SessionEnd` | Token-stats snapshot + session.log rotation; no LLM. The Docker stack stays up (shared across sessions — never stopped by hooks) |
+
+There is **no Stop hook** anymore: episodic memory is written by the SessionStart distiller from the durable transcript, not at end of session.
 
 ### Retention policy
-- Episodic facts: invalidated after 30 days, hard-deleted after 30 days grace (60-day total window)
+- Episodic facts (`kind: episodic`): invalidated after 30 days, hard-deleted after 30 days grace (60-day total window)
+- `kind: preference` / `kind: workflow` facts are exempt from time-based purge (they describe the user, not the moment)
 - `immune = true` exempts a fact from all purges; controlled via `memory_immunize`/`memory_release`/`memory_extend`
 
 ## Roadmap phases
@@ -81,8 +91,10 @@ All three are on an internal Docker network (`mem_net`). Hooks on the host talk 
 ## Key decisions already made (do not re-open)
 - Memory is a **proprietary layer**, not Graphiti (Graphiti's per-episode LLM calls make bulk ingestion too costly)
 - Bulk ingestion = **zero LLM** (pure Ollama embedding)
-- Master agent is **read-only**; all writes are delegated to haiku
-- Haiku is called only when session is "dirty" (two-stage deterministic gate)
+- Master agent is **read-only**; all memory writes go through the distiller (extractor haiku → arbiter sonnet)
+- Episodic memory is written at **SessionStart from past transcripts** (ledger-gated), not at Stop — the transcript on disk is the durable source
+- Distiller prompts live in `plugins/memory/hooks/prompts/*.md` (extractor.md / arbiter.md), never inline in Python
+- Orchestrator (worker / worker-small / roadmapper) is the entry point for **backlog-driven work only**, not for interactive sessions
 - `SubagentStop` does **not** write episodic memory; it only reconciles code RAG
 - Ollama runs **inside Docker** (`mem_net`), not reusing the host's Ollama instance
 - Code chunking = **per function** (AST, tree-sitter); docstrings kept (signal for embedding quality)

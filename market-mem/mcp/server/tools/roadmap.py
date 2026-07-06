@@ -23,12 +23,18 @@ KINDS = {
     "spec":      {"label": "Spec",      "prefix": "ROADMAP:SPEC",      "seq": "seq_spec"},
     "milestone": {"label": "Milestone", "prefix": "ROADMAP:MILESTONE", "seq": "seq_milestone"},
     "task":      {"label": "Task",      "prefix": "ROADMAP:TASK",      "seq": "seq_task"},
+    # Canon Driven Development: detail nodes carrying the implementation
+    # canon (API contracts, design decisions, constraints). A task points to
+    # its canon via DETAILS edges; task_claim bundles them into the
+    # dispatch-ready payload for the worker.
+    "canon":     {"label": "Canon",     "prefix": "ROADMAP:CANON",     "seq": "seq_canon"},
 }
 
 STATUSES = {
     "spec":      {"draft", "active", "done", "obsolete"},
     "milestone": {"planned", "active", "done"},
     "task":      {"todo", "in_progress", "blocked", "done"},
+    "canon":     {"draft", "active", "obsolete"},
 }
 
 # Whitelisted mutable fields per kind. claimed_* is deliberately absent from
@@ -36,7 +42,10 @@ STATUSES = {
 FIELDS = {
     "spec":      {"title", "description", "status"},
     "milestone": {"title", "description", "status", "due"},
-    "task":      {"title", "description", "status", "type", "blocked_reason"},
+    # dod = Definition of Done, verified by the task-verify skill before
+    # task_release(done=true); due = target date "YYYY-MM-DD".
+    "task":      {"title", "description", "status", "type", "blocked_reason", "dod", "due"},
+    "canon":     {"title", "description", "status"},
 }
 
 TASK_TYPES = {"feature", "bug", "doc", "test", "infra", "chore"}
@@ -46,6 +55,7 @@ EDGES = {
     "DEPENDS_ON": {("Task", "Task"), ("Spec", "Spec")},
     "IMPLEMENTS": {("Task", "Spec")},
     "PART_OF":    {("Task", "Milestone")},
+    "DETAILS":    {("Canon", "Task"), ("Canon", "Spec")},
 }
 
 _LABELS = {v["label"] for v in KINDS.values()}
@@ -150,7 +160,8 @@ def _apply_one(g, group_id: str, op: dict, author: str, worktree: str, now: int)
             return {"op": action, "status": "error", "error": invalid}
         node_id = _next_id(g, group_id, kind)
         label = KINDS[kind]["label"]
-        default_status = {"spec": "draft", "milestone": "planned", "task": "todo"}[kind]
+        default_status = {"spec": "draft", "milestone": "planned",
+                          "task": "todo", "canon": "draft"}[kind]
         props = {
             "id": node_id,
             "group_id": group_id,
@@ -325,12 +336,18 @@ def roadmap_lint(group_id: str) -> dict:
     res = g.query("MATCH (:Task)-[:PART_OF]->(m:Milestone) RETURN DISTINCT m.id")
     milestones_with_tasks.update(r[0] for r in res.result_set)
 
-    # Orphan milestones
+    attached_canon: set[str] = set()
+    res = g.query("MATCH (c:Canon)-[:DETAILS]->() RETURN DISTINCT c.id")
+    attached_canon.update(r[0] for r in res.result_set)
+
+    # Orphan milestones / detached canon
     for nid, props in nodes.items():
         if props["_kind"] == "milestone" and nid not in milestones_with_tasks:
             errors.append(f"{nid}: orphan milestone (no task PART_OF it)")
         if props["_kind"] == "task" and nid not in implements:
             warnings.append(f"{nid}: task implements no spec")
+        if props["_kind"] == "canon" and nid not in attached_canon:
+            warnings.append(f"{nid}: canon node DETAILS nothing (link it to a task or spec)")
 
     # Circular DEPENDS_ON (iterative DFS, white/grey/black)
     WHITE, GREY, BLACK = 0, 1, 2
@@ -399,7 +416,37 @@ def task_claim(task_id: str, group_id: str, user: str, worktree: str) -> dict:
         """,
         {"id": task_id, "user": user, "wt": worktree, "now": now},
     )
-    return {"status": "claimed", "id": task_id, "by": user, "worktree": worktree}
+    return {"status": "claimed", "id": task_id, "by": user, "worktree": worktree,
+            **_dispatch_payload(g, task_id, current)}
+
+
+def _dispatch_payload(g, task_id: str, task_props: dict) -> dict:
+    """Canon-Driven-Development bundle returned by task_claim: everything the
+    orchestrator forwards to a worker, no extra round-trips."""
+    res = g.query(
+        """
+        MATCH (t:Task {id: $id})
+        OPTIONAL MATCH (c:Canon)-[:DETAILS]->(t)
+        OPTIONAL MATCH (t)-[:DEPENDS_ON]->(d:Task)
+        RETURN collect(DISTINCT c), collect(DISTINCT d.id)
+        """,
+        {"id": task_id},
+    )
+    canon_nodes, dep_ids = res.result_set[0] if res.result_set else ([], [])
+    canon = []
+    for node in canon_nodes:
+        p = dict(node.properties)
+        if p.get("status") == "obsolete":
+            continue
+        canon.append({"id": p.get("id"), "title": p.get("title"),
+                      "description": p.get("description")})
+    canon.sort(key=lambda c: c["id"] or "")
+    return {
+        "task": {k: task_props.get(k)
+                 for k in ("title", "description", "type", "dod", "due")},
+        "canon": canon,
+        "depends_on": sorted(d for d in dep_ids if d),
+    }
 
 
 def task_release(task_id: str, group_id: str, user: str, done: bool = False) -> dict:
@@ -431,6 +478,39 @@ def task_release(task_id: str, group_id: str, user: str, done: bool = False) -> 
         {"id": task_id, "done": done, "now": now},
     )
     return {"status": "released", "id": task_id, "done": done}
+
+
+def task_link_code(task_id: str, group_id: str, symbols: list[str]) -> dict:
+    """Link a task to the code it produced: (:Task)-[:PRODUCED]->(:CodeChunk).
+
+    Called by the orchestrator when a task completes, with the symbols the
+    worker reported (module.func / module.Class.method). Symbols not found in
+    the code index (not yet ingested, or misreported) come back in `missing`
+    — they are NOT an error, retry after the next reindex if needed."""
+    g = get_graph(group_id)
+    now = _now()
+    if _get_node(g, task_id) is None:
+        return {"status": "error", "error": f"task not found: {task_id}"}
+
+    linked: list[str] = []
+    missing: list[str] = []
+    for sym in symbols:
+        if not sym:
+            continue
+        res = g.query(
+            """
+            MATCH (t:Task {id: $tid})
+            MATCH (c:CodeChunk {symbol: $sym, valid: true})
+            MERGE (t)-[r:PRODUCED]->(c)
+            SET r.created_at = coalesce(r.created_at, $now)
+            RETURN count(r)
+            """,
+            {"tid": task_id, "sym": sym, "now": now},
+        )
+        n = res.result_set[0][0] if res.result_set else 0
+        (linked if n else missing).append(sym)
+
+    return {"status": "ok", "id": task_id, "linked": linked, "missing": missing}
 
 
 # ---------------------------------------------------------------------------
@@ -531,6 +611,16 @@ def roadmap_impact(node_id: str, group_id: str) -> dict:
         out["dependent_tasks"] = [
             {"id": r[0], "title": r[1], "status": r[2], "claimed_by": r[3]}
             for r in res.result_set
+        ]
+        # Code produced by this task (PRODUCED edges written at task
+        # completion) — what to re-inspect when the task's canon changes.
+        res = g.query(
+            "MATCH (t:Task {id: $id})-[:PRODUCED]->(c:CodeChunk {valid: true}) "
+            "RETURN c.symbol, c.path ORDER BY c.symbol",
+            {"id": node_id},
+        )
+        out["produced_code"] = [
+            {"symbol": r[0], "path": r[1]} for r in res.result_set
         ]
     return out
 

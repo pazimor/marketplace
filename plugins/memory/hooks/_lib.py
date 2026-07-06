@@ -18,13 +18,12 @@ MEM_URL  = f"https://{MEM_HOST}:{MEM_PORT}"
 # 127.0.0.1.
 MEM_VERIFY = False
 
-DIRTY_MARKER_NAME   = ".mcp-memory/dirty"
 SESSION_LOG_NAME    = ".mcp-memory/session.log"
 
-# Set on the env of the headless `claude -p` haiku subprocess. Its own hook
-# invocations (SessionStart/PostToolUse/Stop/SessionEnd/SubagentStop) must
-# no-op, otherwise its Stop/SessionEnd would see the still-dirty marker and
-# recursively spawn another haiku subprocess (infinite loop / token burn).
+# Set on the env of the headless `claude -p` subprocesses spawned by the
+# distiller (extractor + arbiter). Their own hook invocations
+# (SessionStart/PostToolUse/SessionEnd/SubagentStop) must no-op, otherwise
+# each SessionStart would spawn another distiller (infinite loop / token burn).
 INTERNAL_SESSION_ENV = "MEM_HOOK_INTERNAL"
 
 
@@ -35,6 +34,26 @@ def is_internal_session() -> bool:
 # Written by `market install` — survives the native plugin install, where this
 # file is copied under ~/.claude/plugins/ and repo-relative paths break.
 COMPOSE_POINTER = Path.home() / ".config" / "market" / "compose_path"
+
+# Optional user settings (e.g. {"distill_sync": true}).
+SETTINGS_FILE = Path.home() / ".config" / "market" / "settings.json"
+
+
+def market_settings() -> dict:
+    try:
+        return json.loads(SETTINGS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def distill_sync_enabled() -> bool:
+    """Distillation runs detached in the background by default; MEM_DISTILL_SYNC=1
+    (or distill_sync=true in ~/.config/market/settings.json) makes SessionStart
+    block until the past transcripts are distilled."""
+    env = os.getenv("MEM_DISTILL_SYNC")
+    if env is not None:
+        return env == "1"
+    return bool(market_settings().get("distill_sync"))
 
 
 def compose_file() -> Path | None:
@@ -112,24 +131,6 @@ def ingest_allowed(repo_path: str) -> tuple[bool, str]:
         return False, f"not a git work tree: {resolved}"
 
     return True, ""
-
-
-def dirty_marker(repo_path: str) -> Path:
-    return Path(repo_path) / DIRTY_MARKER_NAME
-
-
-def mark_dirty(repo_path: str) -> None:
-    m = dirty_marker(repo_path)
-    m.parent.mkdir(parents=True, exist_ok=True)
-    m.touch()
-
-
-def is_dirty(repo_path: str) -> bool:
-    return dirty_marker(repo_path).exists()
-
-
-def clear_dirty(repo_path: str) -> None:
-    dirty_marker(repo_path).unlink(missing_ok=True)
 
 
 def session_log_path(repo_path: str) -> Path:

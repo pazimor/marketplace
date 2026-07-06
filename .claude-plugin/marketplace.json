@@ -4,18 +4,13 @@
     "name": "eddy-hummel",
     "email": "eddy.hummel@gmail.com"
   },
-  "description": "AI guidance marketplace — memory, skills, and agents for Claude Code",
-  "version": "0.1.0",
+  "description": "AI guidance marketplace — memory, roadmap, skills, and agents for Claude Code",
+  "version": "0.2.0",
   "plugins": [
     {
       "name": "memory",
       "source": "./plugins/memory",
-      "description": "Persistent code index (bulk, zero-LLM) + episodic memory (haiku) via FalkorDB + Ollama"
-    },
-    {
-      "name": "roadmap",
-      "source": "./plugins/roadmap",
-      "description": "Structured roadmap in the project graph — persistent backlog, task claims, deterministic lint, retro loop and validation gates"
+      "description": "Project graph for Claude Code — code index (bulk, zero-LLM), episodic memory distilled from past transcripts (extractor haiku → arbiter sonnet), structured roadmap with backlog/claims/DoD, orchestrator + worker + roadmapper agents, via FalkorDB"
     }
   ]
 }

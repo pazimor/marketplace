@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _lib import cwd_from_hook, is_internal_session, read_stdin_json
 
 # No-op for the headless haiku subprocess (it does its own reconcile, and must
-# never be steered away from Read — see stop.py).
+# never be steered away from Read — see _distill.py).
 if is_internal_session():
     sys.exit(0)
 
