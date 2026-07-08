@@ -32,10 +32,9 @@ marketplace/
 ### Infrastructure (Docker)
 One shared Docker stack per machine, never one-per-project:
 - **FalkorDB** — vector + full-text + graph DB; one named graph per project (`g_<hash>`)
-- **Ollama** — local embedding, stateless, not published on host network
-- **MCP server** — containerized, exposes endpoint on `127.0.0.1` only (SSE/HTTP)
+- **MCP server** — containerized, exposes endpoint on `127.0.0.1` only (SSE/HTTP); does its own embedding in-process (SentenceTransformers, models cached on a persistent volume) — no separate embedding service
 
-All three are on an internal Docker network (`mem_net`). Hooks on the host talk only to the MCP endpoint, never to FalkorDB or Ollama directly.
+Both are on an internal Docker network (`mem-net`). Hooks on the host talk only to the MCP endpoint, never to FalkorDB directly.
 
 ### Memory system — two layers in one FalkorDB graph
 | Layer | Node label | How written | LLM cost |
@@ -81,7 +80,7 @@ There is **no Stop hook** anymore: episodic memory is written by the SessionStar
 - `immune = true` exempts a fact from all purges; controlled via `memory_immunize`/`memory_release`/`memory_extend`
 
 ## Roadmap phases
-- **Phase 0** — Docker scaffold (FalkorDB + Ollama + MCP server)
+- **Phase 0** — Docker scaffold (FalkorDB + MCP server)
 - **Phase 1** — Bulk code ingestion + code RAG + MCP read tools ← _usable daily from here_
 - **Phase 2** — Episodic layer + haiku writer hook
 - **Phase 3** — Installer CLI (install/uninstall/doctor, Claude Code scope)
@@ -90,13 +89,13 @@ There is **no Stop hook** anymore: episodic memory is written by the SessionStar
 
 ## Key decisions already made (do not re-open)
 - Memory is a **proprietary layer**, not Graphiti (Graphiti's per-episode LLM calls make bulk ingestion too costly)
-- Bulk ingestion = **zero LLM** (pure Ollama embedding)
+- Bulk ingestion = **zero LLM** (pure embedding, computed in-process by the MCP server)
 - Master agent is **read-only**; all memory writes go through the distiller (extractor haiku → arbiter sonnet)
 - Episodic memory is written at **SessionStart from past transcripts** (ledger-gated), not at Stop — the transcript on disk is the durable source
 - Distiller prompts live in `plugins/memory/hooks/prompts/*.md` (extractor.md / arbiter.md), never inline in Python
 - Orchestrator (worker / worker-small / roadmapper) is the entry point for **backlog-driven work only**, not for interactive sessions
 - `SubagentStop` does **not** write episodic memory; it only reconciles code RAG
-- Ollama runs **inside Docker** (`mem_net`), not reusing the host's Ollama instance
+- Embedding runs **inside the `mcp` container** (SentenceTransformers, cached model volume) — no standalone embedding service (Ollama/TEI) to deploy or babysit
 - Code chunking = **per function** (AST, tree-sitter); docstrings kept (signal for embedding quality)
 
 ## Open decisions (to resolve during implementation)

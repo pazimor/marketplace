@@ -25,6 +25,8 @@ You receive either:
   `roadmap_impact` also returns `produced_code` (the PRODUCED edges written
   by the orchestrator via `task_link_code`) — use it to know which functions
   to re-inspect when a spec or task canon changes.
+- a **show** the user might need to see the full roadmap just show the totale
+  retrieved roadmap
 
 ## Rules
 

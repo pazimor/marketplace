@@ -1,6 +1,6 @@
 # market-mem
 
-Stack Docker du plugin memory : TEI (embeddings) + FalkorDB (vecteurs + graphe) + serveur MCP.
+Stack Docker du plugin memory : FalkorDB (vecteurs + graphe) + serveur MCP (embedding intégré).
 
 ---
 
@@ -11,10 +11,8 @@ HÔTE (Claude Code + hooks)
    │  SSE → 127.0.0.1:<MEM_PORT>
    ▼
 ┌── réseau Docker interne « mem-net » ───────────────────────────────┐
-│  mcp        ← serveur MCP + ingestion   (seul service exposé)      │
+│  mcp        ← serveur MCP + embedding + ingestion (seul service exposé) │
 │  falkordb   ← vecteurs + graphe + full-text  (non publié)          │
-│  tei-code   ← embeddings code (TEI, non publié)                    │
-│  tei-memory ← embeddings mémoire (TEI, non publié)                 │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,7 +53,7 @@ docker compose -f market-mem/docker-compose.yml stop
 ### Couche code (bulk, zéro LLM)
 
 - [HOOKS]
-   - `SessionStart` : parsing AST (tree-sitter) → chunks par fonction → embed via TEI → stocké dans FalkorDB.
+   - `SessionStart` : parsing AST (tree-sitter) → chunks par fonction → embed via le serveur MCP → stocké dans FalkorDB.
    - `PostToolUse(Write/Edit)` : reindex incrémental des symboles dont le hash change.
 - Stockage **par référence** : `path + [start_line, end_line]`, jamais de copie du code.
 - `content_hash` gate le ré-embed : seuls les symboles modifiés sont recalculés.
@@ -121,7 +119,7 @@ Un `group_id` = un graphe nommé dans FalkorDB = isolation totale entre projets.
 
 ## Modèles d'embedding
 
-Les modèles tournent via **TEI (Text Embeddings Inference)** dans deux conteneurs séparés :
+Les modèles tournent **directement dans le conteneur `mcp`** (chargés via SentenceTransformers, cache persistant sur le volume `embed-models`) :
 - code : `microsoft/graphcodebert-base` — 768d, RoBERTa entraîné sur code multilangage.
 - memory : `nomic-ai/nomic-embed-text-v1.5` — 768d, Matryoshka, contexte long.
 
