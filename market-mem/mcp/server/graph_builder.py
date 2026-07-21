@@ -818,8 +818,9 @@ def _upsert_file_nodes(g, group_id: str, entries: list[tuple[str, str]]) -> None
         )
 
 
-def _write_imports(g, import_pairs: list[tuple[str, str]]) -> None:
-    """Batch-create IMPORTS edges. *import_pairs* = list of (source_path, target_path)."""
+def _write_imports(g, import_pairs: list[tuple[str, str]], built_at: int) -> None:
+    """Batch-create IMPORTS edges stamped with the current run id.
+    *import_pairs* = list of (source_path, target_path)."""
     if not import_pairs:
         return
     rows = [
@@ -832,9 +833,10 @@ def _write_imports(g, import_pairs: list[tuple[str, str]]) -> None:
             UNWIND $pairs AS p
             MATCH (s:FileNode {id: p.src})
             MATCH (t:FileNode {id: p.tgt})
-            MERGE (s)-[:IMPORTS]->(t)
+            MERGE (s)-[r:IMPORTS]->(t)
+            SET r.built_at = $built_at
             """,
-            {"pairs": rows[i:i + _EDGE_BATCH]},
+            {"pairs": rows[i:i + _EDGE_BATCH], "built_at": built_at},
         )
 
 
@@ -940,8 +942,9 @@ def _fetch_candidates(g, group_id: str, names: set[str], cache: dict) -> None:
                 cache[row[0]] = list(row[1])
 
 
-def _write_call_edges(g, pairs: list[tuple[str, str]], certainty: str) -> int:
-    """Batch-create CALLS edges with a certainty property.  Returns edges created."""
+def _write_call_edges(g, pairs: list[tuple[str, str]], certainty: str, built_at: int) -> int:
+    """Batch-create CALLS edges with certainty + run-stamp properties.
+    Returns edges created (re-derived existing edges are re-stamped, not counted)."""
     if not pairs:
         return 0
     rows = [{"src": s, "tgt": t} for s, t in dict.fromkeys(pairs)]
@@ -953,16 +956,16 @@ def _write_call_edges(g, pairs: list[tuple[str, str]], certainty: str) -> int:
             MATCH (s:CodeChunk {id: p.src, valid: true})
             MATCH (t:CodeChunk {id: p.tgt})
             MERGE (s)-[r:CALLS]->(t)
-            SET r.certainty = $certainty
+            SET r.certainty = $certainty, r.built_at = $built_at
             """,
-            {"pairs": rows[i:i + _EDGE_BATCH], "certainty": certainty},
+            {"pairs": rows[i:i + _EDGE_BATCH], "certainty": certainty, "built_at": built_at},
         )
         created += int(getattr(res, "relationships_created", 0) or 0)
     return created
 
 
 def _resolve_and_write_calls(
-    g, group_id: str, analyses: list[FileAnalysis], cache: dict,
+    g, group_id: str, analyses: list[FileAnalysis], cache: dict, built_at: int,
 ) -> tuple[int, int]:
     """Resolve callee names for a batch of analyses and write CALLS edges.
 
@@ -1032,9 +1035,39 @@ def _resolve_and_write_calls(
         # Tier 5 — too ambiguous → nothing
 
     # Write probable first so a pair that is also certain ends up "certain"
-    n_probable = _write_call_edges(g, probable, "probable")
-    n_certain = _write_call_edges(g, certain, "certain")
+    n_probable = _write_call_edges(g, probable, "probable", built_at)
+    n_certain = _write_call_edges(g, certain, "certain", built_at)
     return n_certain, n_probable
+
+
+def _purge_stale_edges(g, group_id: str, run_id: int) -> tuple[int, int]:
+    """Mark-and-sweep: delete CALLS / IMPORTS edges not re-stamped by *run_id*.
+
+    Covers edges from removed source functions, edges from old resolvers
+    (no built_at at all), and edges whose resolution no longer holds.
+    Returns (calls_purged, imports_purged).
+    """
+    # Inline group_id → index-served node scan (group_id is indexed on both
+    # CodeChunk and FileNode; verified with EXPLAIN against live FalkorDB).
+    res = g.query(
+        """
+        MATCH (s:CodeChunk {group_id: $gid})-[r:CALLS]->()
+        WHERE r.built_at IS NULL OR r.built_at < $run
+        DELETE r
+        """,
+        {"gid": group_id, "run": run_id},
+    )
+    calls_purged = int(getattr(res, "relationships_deleted", 0) or 0)
+    res = g.query(
+        """
+        MATCH (s:FileNode {group_id: $gid})-[r:IMPORTS]->()
+        WHERE r.built_at IS NULL OR r.built_at < $run
+        DELETE r
+        """,
+        {"gid": group_id, "run": run_id},
+    )
+    imports_purged = int(getattr(res, "relationships_deleted", 0) or 0)
+    return calls_purged, imports_purged
 
 
 def _purge_file_edges(g, source_path: str) -> None:
@@ -1105,7 +1138,9 @@ def _walk_repo(repo_path: str) -> Iterator[tuple[str, str]]:
 # Public API
 # ---------------------------------------------------------------------------
 
-def _flush_batch(g, group_id: str, batch: list[FileAnalysis], cache: dict) -> tuple[int, int, int]:
+def _flush_batch(
+    g, group_id: str, batch: list[FileAnalysis], cache: dict, built_at: int,
+) -> tuple[int, int, int]:
     """Persist one batch of analyses (FileNodes + IMPORTS + CALLS).
     Returns (imports_created, calls_certain, calls_probable)."""
     if not batch:
@@ -1120,9 +1155,9 @@ def _flush_batch(g, group_id: str, batch: list[FileAnalysis], cache: dict) -> tu
             file_entries.append((tp, Path(tp).suffix.lstrip(".")))
             import_pairs.append((a.path, tp))
     _upsert_file_nodes(g, group_id, file_entries)
-    _write_imports(g, import_pairs)
+    _write_imports(g, import_pairs, built_at)
 
-    n_certain, n_probable = _resolve_and_write_calls(g, group_id, batch, cache)
+    n_certain, n_probable = _resolve_and_write_calls(g, group_id, batch, cache, built_at)
     return len(import_pairs), n_certain, n_probable
 
 
@@ -1134,10 +1169,20 @@ def build_graph(group_id: str, repo_path: str) -> dict:
 
     Single analysis pass, streamed in batches of _FILE_BATCH files so a
     kernel-sized repo never holds every FileAnalysis in RAM at once.
+
+    Mark-and-sweep purge: every CALLS / IMPORTS edge written during this run
+    is stamped with ``built_at = run_id``; once the full pass completes, any
+    edge of the group whose built_at is missing or older is deleted (stale
+    resolutions, removed source functions, pre-migration edges).
+    Per-file failures (the ``errors`` counter) do NOT inhibit the purge —
+    their edges are simply re-derived by the next successful run.  If the
+    pass itself aborts (exception escaping this function), the purge never
+    runs, so a partially-stamped graph is never swept.
     """
     from .db import get_graph
 
     g = get_graph(group_id)
+    run_id = int(time.time() * 1000)
 
     # Collect all repo paths for import resolution (paths only — cheap)
     all_paths: set[str] = set()
@@ -1153,7 +1198,7 @@ def build_graph(group_id: str, repo_path: str) -> dict:
 
     def _flush() -> None:
         nonlocal imports_created, calls_certain, calls_probable, batch
-        imp, cert, prob = _flush_batch(g, group_id, batch, cache)
+        imp, cert, prob = _flush_batch(g, group_id, batch, cache, run_id)
         imports_created += imp
         calls_certain += cert
         calls_probable += prob
@@ -1180,17 +1225,23 @@ def build_graph(group_id: str, repo_path: str) -> dict:
 
     _flush()
 
+    # Sweep: the full pass completed (per-file errors included) — remove
+    # edges this run did not re-derive.
+    calls_purged, imports_purged = _purge_stale_edges(g, group_id, run_id)
+
     log.info(
         "build_graph done — files=%d imports=%d calls_certain=%d "
-        "calls_probable=%d errors=%d (%.0fs)",
-        total, imports_created, calls_certain, calls_probable, errors,
-        time.time() - t0,
+        "calls_probable=%d calls_purged=%d imports_purged=%d errors=%d (%.0fs)",
+        total, imports_created, calls_certain, calls_probable,
+        calls_purged, imports_purged, errors, time.time() - t0,
     )
     return {
         "files": total,
         "imports": imports_created,
         "calls_certain": calls_certain,
         "calls_probable": calls_probable,
+        "calls_purged": calls_purged,
+        "imports_purged": imports_purged,
         "errors": errors,
     }
 
@@ -1227,12 +1278,16 @@ def rebuild_file_graph(group_id: str, file_path: str, repo_path: str) -> dict:
 
     analysis = _analyze_file(file_path, ext, code, repo_path, all_paths)
 
+    # Stamp built_at for consistency with build_graph (a later full rebuild
+    # re-derives these edges anyway and re-stamps them with its own run id).
+    now = int(time.time() * 1000)
+
     _upsert_file_nodes(g, group_id, [(file_path, ext)] + [
         (tp, Path(tp).suffix.lstrip(".")) for tp in analysis.imported_paths
     ])
-    _write_imports(g, [(file_path, tp) for tp in analysis.imported_paths])
+    _write_imports(g, [(file_path, tp) for tp in analysis.imported_paths], now)
 
-    n_certain, n_probable = _resolve_and_write_calls(g, group_id, [analysis], {})
+    n_certain, n_probable = _resolve_and_write_calls(g, group_id, [analysis], {}, now)
 
     return {
         "imports": len(analysis.imported_paths),

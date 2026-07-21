@@ -43,6 +43,8 @@ _INIT_QUERIES = [
     # resolution in graph_builder (ENDS WITH is not index-served)
     "CREATE INDEX FOR (c:CodeChunk) ON (c.term_name)",
     "CREATE INDEX FOR (c:CodeChunk) ON (c.path)",
+    # Serves the mark-and-sweep edge purge in build_graph
+    "CREATE INDEX FOR (c:CodeChunk) ON (c.group_id)",
     # Roadmap layer (Spec / Milestone / Task / Canon)
     "CREATE INDEX FOR (c:Canon) ON (c.id)",
     "CREATE INDEX FOR (s:Spec) ON (s.id)",

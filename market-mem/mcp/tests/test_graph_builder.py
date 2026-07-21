@@ -300,6 +300,120 @@ def test_rebuild_file_graph_uses_new_resolution(gid, tmp_path):
 def test_build_graph_stats_shape(gid, tmp_path):
     (tmp_path / "a.py").write_text("def solo_fn():\n    pass\n")
     stats = gb.build_graph(gid, str(tmp_path))
-    assert set(stats) == {"files", "imports", "calls_certain", "calls_probable", "errors"}
+    assert set(stats) == {
+        "files", "imports", "calls_certain", "calls_probable",
+        "calls_purged", "imports_purged", "errors",
+    }
     assert stats["files"] == 1
     assert stats["errors"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Mark-and-sweep purge of stale edges
+# ---------------------------------------------------------------------------
+
+def test_purge_legacy_edge_without_built_at(gid, tmp_path):
+    """An edge left by the old resolver (no built_at) is swept by a full
+    rebuild, and the counter reports it."""
+    g = get_graph(gid)
+    a = tmp_path / "a.py"
+    a.write_text("def standalone_fn():\n    pass\n")
+    b = tmp_path / "b.py"
+    b.write_text("def other_fn():\n    pass\n")
+    ca = _add_chunk(g, gid, str(a), "a.standalone_fn")
+    cb = _add_chunk(g, gid, str(b), "b.other_fn")
+    # Legacy edge: no built_at, no certainty — not derivable from the code
+    g.query(
+        "MATCH (s:CodeChunk {id: $src}), (t:CodeChunk {id: $tgt}) "
+        "CREATE (s)-[:CALLS]->(t)",
+        {"src": ca, "tgt": cb},
+    )
+
+    stats = gb.build_graph(gid, str(tmp_path))
+    assert _edges_from(g, ca) == {}
+    assert stats["calls_purged"] == 1
+
+
+def test_rederived_edge_survives_purge(gid, tmp_path):
+    """An edge the run re-derives gets the run's built_at and survives;
+    a second full rebuild purges nothing and keeps the same edge set."""
+    g = get_graph(gid)
+    d = tmp_path / "lib.py"
+    d.write_text("def compute_checksum(b):\n    return 0\n")
+    caller = tmp_path / "main.py"
+    caller.write_text("def entry():\n    return compute_checksum(b'')\n")
+    tgt = _add_chunk(g, gid, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, str(caller), "main.entry")
+
+    gb.build_graph(gid, str(tmp_path))
+    assert _edges_from(g, src) == {tgt: "certain"}
+
+    stats2 = gb.build_graph(gid, str(tmp_path))
+    assert _edges_from(g, src) == {tgt: "certain"}
+    assert stats2["calls_purged"] == 0
+    total = g.query("MATCH ()-[r:CALLS]->() RETURN count(r)").result_set[0][0]
+    assert total == 1  # no duplicates, no growth
+
+
+def test_purge_edge_of_removed_source_function(gid, tmp_path):
+    """When the calling function disappears from the file, its CALLS edge
+    disappears after the next full rebuild."""
+    g = get_graph(gid)
+    d = tmp_path / "lib.py"
+    d.write_text("def compute_checksum(b):\n    return 0\n")
+    caller = tmp_path / "main.py"
+    caller.write_text("def entry():\n    return compute_checksum(b'')\n")
+    tgt = _add_chunk(g, gid, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, str(caller), "main.entry")
+
+    gb.build_graph(gid, str(tmp_path))
+    assert _edges_from(g, src) == {tgt: "certain"}
+
+    # The caller function is removed from the source (chunk may linger in
+    # the DB until ingestion cleanup — the edge must still be swept)
+    caller.write_text("VERSION = 1\n")
+    stats = gb.build_graph(gid, str(tmp_path))
+    assert _edges_from(g, src) == {}
+    assert stats["calls_purged"] == 1
+
+
+def test_rebuild_file_graph_stamps_built_at(gid, tmp_path):
+    g = get_graph(gid)
+    d = tmp_path / "lib.py"
+    d.write_text("def compute_checksum(b):\n    return 0\n")
+    caller = tmp_path / "main.py"
+    caller.write_text("def entry():\n    return compute_checksum(b'')\n")
+    _add_chunk(g, gid, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, str(caller), "main.entry")
+    # FileNodes must exist for rebuild's path collection
+    gb.build_graph(gid, str(tmp_path))
+
+    result = gb.rebuild_file_graph(gid, str(caller), str(tmp_path))
+    assert result["calls_certain"] == 1
+    res = g.query(
+        "MATCH (s:CodeChunk {id: $id})-[r:CALLS]->() RETURN r.built_at",
+        {"id": src},
+    )
+    assert res.result_set and res.result_set[0][0] is not None
+
+
+def test_import_edge_purge(gid, tmp_path):
+    """A stale IMPORTS edge (no built_at) between the group's FileNodes is
+    swept and counted."""
+    g = get_graph(gid)
+    a = tmp_path / "a.py"
+    a.write_text("X = 1\n")
+    b = tmp_path / "b.py"
+    b.write_text("Y = 2\n")
+    # Pre-create FileNodes with a legacy IMPORTS edge (a does NOT import b)
+    gb._upsert_file_nodes(g, gid, [(str(a), "py"), (str(b), "py")])
+    g.query(
+        "MATCH (s:FileNode {id: $src}), (t:FileNode {id: $tgt}) "
+        "CREATE (s)-[:IMPORTS]->(t)",
+        {"src": gb._file_node_id(str(a)), "tgt": gb._file_node_id(str(b))},
+    )
+
+    stats = gb.build_graph(gid, str(tmp_path))
+    assert stats["imports_purged"] == 1
+    total = g.query("MATCH ()-[r:IMPORTS]->() RETURN count(r)").result_set[0][0]
+    assert total == 0
