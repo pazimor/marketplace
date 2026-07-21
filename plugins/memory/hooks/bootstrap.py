@@ -99,10 +99,12 @@ def main() -> None:
     lines: list[str] = [
         "## Project graph (memory + roadmap + code)",
         f"Identity for task_claim / roadmap_apply: user=`{user}`, worktree=`{worktree}`, branch=`{branch}`, group_id=`{gid}`.",
-        "Three axes in one graph — memory (past decisions: memory_search), "
-        "roadmap (specs/milestones/tasks: backlog, roadmap_apply, task_claim), "
-        "code (indexed chunks: code_search before Read). "
-        "Call graph_overview to orient; see the graph-usage skill for workflows.",
+        "Usage rules (this project's graph — group_id above):",
+        f"- Conceptual code question (\"where is X handled?\") → `code_search(group_id=\"{gid}\", query=…)` BEFORE Grep/Read. Grep stays right for literal/exhaustive sweeps.",
+        f"- Architecture decision, refactor, or reopening a past choice → `memory_search(group_id=\"{gid}\", query=…)` REQUIRED before acting.",
+        f"- Start of a non-trivial task → `graph_overview(group_id=\"{gid}\")` to orient.",
+        "- Empty results are cheap and expected — call speculatively. "
+        "Roadmap axis: backlog, roadmap_apply, task_claim; see the graph-usage skill.",
     ]
 
     data = fetch_bootstrap(gid)

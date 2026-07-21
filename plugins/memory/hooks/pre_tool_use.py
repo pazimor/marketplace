@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _lib import cwd_from_hook, is_internal_session, read_stdin_json
+from _lib import cwd_from_hook, group_id, is_internal_session, read_stdin_json
 
 # No-op for the headless haiku subprocess (it does its own reconcile, and must
 # never be steered away from Read — see _distill.py).
@@ -40,12 +40,14 @@ CODE_SUFFIXES = {
 
 NUDGE_MARKER_NAME = ".mcp-memory/nudge"
 
-REMINDER = (
-    "Code RAG available: prefer `code_search` (semantic, ~10-20x fewer tokens "
-    "than a full Read) to locate the relevant chunk, then `code_fetch` on that "
-    "chunk. Fall back to Read only when the chunk is insufficient (e.g. you need "
-    "the exact surrounding text to Edit). This also feeds the code-RAG token stats."
-)
+def _reminder(gid: str) -> str:
+    return (
+        f"Code RAG available: prefer `code_search(group_id=\"{gid}\", query=…)` "
+        "(semantic, ~10-20x fewer tokens than a full Read) to locate the relevant "
+        "chunk, then `code_fetch` on that chunk. Fall back to Read only when the "
+        "chunk is insufficient (e.g. you need the exact surrounding text to Edit). "
+        "Hits include snippets — one call is usually enough to judge relevance."
+    )
 
 
 def _already_nudged(repo: str, session_id: str) -> bool:
@@ -63,12 +65,12 @@ def _already_nudged(repo: str, session_id: str) -> bool:
     return False
 
 
-def _emit_reminder() -> None:
+def _emit_reminder(gid: str) -> None:
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
-            "additionalContext": REMINDER,
+            "additionalContext": _reminder(gid),
         }
     }))
 
@@ -87,7 +89,7 @@ def main() -> None:
     if _already_nudged(repo, session_id):
         sys.exit(0)
 
-    _emit_reminder()
+    _emit_reminder(group_id(repo))
     sys.exit(0)
 
 

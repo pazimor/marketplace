@@ -98,7 +98,9 @@ def test_code_search_end_to_end_bumps_stats(gid, sample_file, tmp_path):
     from server.tools.code_search import code_search
 
     ingest_repo(gid, str(tmp_path))
-    results = code_search("hello function", gid, k=5)
+    out = code_search("hello function", gid, k=5)
+    assert "note" in out
+    results = out["results"]
     if not results:
         pytest.skip("ingestion produced no searchable chunks")
     s = stats_get(gid)

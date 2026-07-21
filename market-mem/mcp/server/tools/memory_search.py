@@ -8,13 +8,19 @@ import time
 
 from ..db import get_graph
 from ..embedder import embed
+from .code_search import _ft_query
+
+NOTE = (
+    "top-k semantic search over past facts/decisions — NOT exhaustive. "
+    "An empty result just means nothing recorded matches; it is cheap and OK."
+)
 
 
 def _rrf_score(rank: int, k: int = 60) -> float:
     return 1.0 / (k + rank)
 
 
-def memory_search(query: str, group_id: str, k: int = 10) -> list[dict]:
+def memory_search(query: str, group_id: str, k: int = 10) -> dict:
     g = get_graph(group_id)
     now = int(time.time() * 1000)
     vec = embed(query, purpose="memory")
@@ -45,13 +51,13 @@ def memory_search(query: str, group_id: str, k: int = 10) -> list[dict]:
                node.created_at, node.valid_from, node.invalid_at, score
         LIMIT $k
         """,
-        {"q": query, "k": k * 2, "now": now},
+        {"q": _ft_query(query), "k": k * 2, "now": now},
     )
 
     scores: dict[str, float] = {}
     meta: dict[str, dict] = {}
 
-    def _register(rows):
+    def _register(rows, source: str):
         for rank, row in enumerate(rows):
             mid, content, mtype, anchor, created_at, valid_from, invalid_at, sc = row
             scores[mid] = scores.get(mid, 0.0) + _rrf_score(rank)
@@ -63,9 +69,14 @@ def memory_search(query: str, group_id: str, k: int = 10) -> list[dict]:
                     "anchor": anchor,
                     "created_at": created_at,
                 }
+            if source == "vec":
+                # FalkorDB yields cosine DISTANCE (0 = identical) — invert.
+                meta[mid]["vec_similarity"] = round(1.0 - float(sc), 4)
+            else:
+                meta[mid]["text_score"] = round(float(sc), 4)
 
-    _register(vec_result.result_set)
-    _register(ft_result.result_set)
+    _register(vec_result.result_set, "vec")
+    _register(ft_result.result_set, "ft")
 
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
 
@@ -80,7 +91,8 @@ def memory_search(query: str, group_id: str, k: int = 10) -> list[dict]:
             {"id": mid, "now": now},
         )
 
-    return [meta[mid] | {"score": sc} for mid, sc in ranked if mid in meta]
+    hits = [meta[mid] | {"rank_score": round(sc, 5)} for mid, sc in ranked if mid in meta]
+    return {"results": hits, "note": NOTE}
 
 
 def memory_query(query: str, group_id: str, symbol: str | None = None) -> list[dict]:

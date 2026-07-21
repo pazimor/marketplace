@@ -24,6 +24,43 @@ from _lib import (
 
 MAX_WAIT_S = 30
 
+CLAUDE_MD_START = "<!-- market-mem:start -->"
+CLAUDE_MD_END = "<!-- market-mem:end -->"
+
+
+def claude_md_block(gid: str) -> str:
+    return "\n".join([
+        CLAUDE_MD_START,
+        "## Memory graph (managed by market-mem — do not edit this block)",
+        f"This project's graph id: `group_id = \"{gid}\"` — pass it to every memory MCP tool.",
+        f"- Conceptual code question (\"where is X handled?\") → `code_search(group_id=\"{gid}\", query=…)` BEFORE Grep/Read.",
+        f"- Architecture decision, refactor, or reopening a past choice → `memory_search(group_id=\"{gid}\", query=…)` before acting.",
+        "- Empty results are cheap and expected — call speculatively.",
+        CLAUDE_MD_END,
+    ])
+
+
+def ensure_claude_md_block(repo: str, gid: str) -> None:
+    """Keep a marker-fenced usage block (group_id + trigger rules) in the
+    project's CLAUDE.md. Idempotent; never creates the file, never touches
+    anything outside the markers. Best-effort."""
+    try:
+        path = Path(repo) / "CLAUDE.md"
+        if not path.is_file():
+            return
+        text = path.read_text()
+        block = claude_md_block(gid)
+        if CLAUDE_MD_START in text and CLAUDE_MD_END in text:
+            head, rest = text.split(CLAUDE_MD_START, 1)
+            _, tail = rest.split(CLAUDE_MD_END, 1)
+            new = head + block + tail
+        else:
+            new = text.rstrip("\n") + "\n\n" + block + "\n"
+        if new != text:
+            path.write_text(new)
+    except Exception as exc:
+        print(f"[mem] CLAUDE.md block skipped: {exc}", file=sys.stderr)
+
 # No-op for the headless distiller subprocesses' own SessionStart (see _distill.py).
 if is_internal_session():
     sys.exit(0)
@@ -65,6 +102,8 @@ def main() -> None:
     payload  = read_stdin_json()
     repo     = cwd_from_hook(payload)
     gid      = group_id(repo)
+
+    ensure_claude_md_block(repo, gid)
 
     # 1. Start Docker stack (skipped when the compose file can't be located —
     # the stack may already be running, so still try the health check below)

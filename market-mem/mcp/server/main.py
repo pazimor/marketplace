@@ -44,6 +44,7 @@ from .tools.overview import bootstrap as _bootstrap
 from .tools.sessions import session_mark_processed as _session_mark_processed
 from .tools.sessions import sessions_processed as _sessions_processed
 from .tools.overview import graph_overview as _graph_overview
+from .tools.route_stats import record_query as _record_query
 from .tools.route_stats import summary as _route_summary
 from .tools.route_stats import track as _track_route
 from .tools.roadmap import (
@@ -68,6 +69,43 @@ _ingest_status: dict[str, dict] = {}
 mcp = FastMCP("memory")
 
 
+def _known_graphs() -> list[dict]:
+    """Project graphs known to this server: {group_id, repo_path}.
+
+    Used to make a missing group_id fail helpfully instead of opaquely."""
+    from .db import get_client, get_graph
+
+    out: list[dict] = []
+    try:
+        for name in get_client().list_graphs():
+            if not name.startswith("g_") or name.startswith("g_it_"):
+                continue
+            gid = name[2:]
+            repo = None
+            try:
+                rs = get_graph(gid).query(
+                    "MATCH (p:Project {group_id: $gid}) RETURN p.repo_path LIMIT 1",
+                    {"gid": gid},
+                ).result_set
+                repo = rs[0][0] if rs else None
+            except Exception:
+                pass
+            out.append({"group_id": gid, "repo_path": repo})
+    except Exception as exc:
+        log.debug("known_graphs failed: %s", exc)
+    return out
+
+
+def _missing_gid() -> dict:
+    return {
+        "error": "group_id is required (it partitions projects — one graph per repo).",
+        "hint": ("Your project's group_id is printed in the 'Project graph' block "
+                 "injected at session start (Identity line). Pick the graph whose "
+                 "repo_path matches your working directory."),
+        "known_graphs": _known_graphs(),
+    }
+
+
 def tracked_tool(*args, **kwargs):
     """`@mcp.tool()` + a per-route usage counter persisted to `.mcp_memory`.
 
@@ -82,15 +120,29 @@ def tracked_tool(*args, **kwargs):
 
 
 @tracked_tool()
-async def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
-    """Search the code index by semantic + keyword similarity. Returns ranked chunks with path, symbol, signature, and line range."""
+async def code_search(query: str, group_id: str = "", k: int = 10) -> dict:
+    """Call this when you look for a CONCEPT and don't know the exact symbol
+    name ("where is retry handled?", "what validates payments?"). Complements
+    Grep — Grep stays better for literal/exhaustive sweeps of a known string.
+    Each hit includes a snippet, so you can judge relevance without a follow-up
+    fetch (~10-20x fewer tokens than a full Read). An empty result is cheap —
+    call speculatively at the start of exploration. group_id: see the
+    'Project graph' session block."""
+    if not group_id:
+        return _missing_gid()
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _code_search, query, group_id, k)
+    res = await loop.run_in_executor(None, _code_search, query, group_id, k)
+    _record_query("code_search", query, len(res.get("results", [])))
+    return res
 
 
 @tracked_tool()
-async def code_fetch(group_id: str, node_id: str = "", path: str = "", symbol: str = "") -> dict:
-    """Fetch the exact source of a code chunk by node_id or path+symbol."""
+async def code_fetch(group_id: str = "", node_id: str = "", path: str = "", symbol: str = "") -> dict:
+    """Fetch the exact source of one chunk found via code_search (by node_id,
+    or path+symbol). Use this instead of Read when the chunk is enough —
+    Read only when you need the surrounding file (e.g. to Edit)."""
+    if not group_id:
+        return _missing_gid()
     return _code_fetch(
         node_id=node_id or None,
         path=path or None,
@@ -100,15 +152,27 @@ async def code_fetch(group_id: str, node_id: str = "", path: str = "", symbol: s
 
 
 @tracked_tool()
-async def memory_search(query: str, group_id: str, k: int = 10) -> list[dict]:
-    """Search episodic memory (facts, decisions, conventions) by semantic + keyword similarity."""
+async def memory_search(query: str, group_id: str = "", k: int = 10) -> dict:
+    """Call this BEFORE choosing an approach, refactoring, or contradicting an
+    existing choice — past decisions, conventions and facts live here and can
+    invalidate your plan. Also when the user references shared history ("comme
+    on avait dit", "le bug d'avant"). An empty result is cheap and fine —
+    call speculatively by default at task start."""
+    if not group_id:
+        return _missing_gid()
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _memory_search, query, group_id, k)
+    res = await loop.run_in_executor(None, _memory_search, query, group_id, k)
+    _record_query("memory_search", query, len(res.get("results", [])))
+    return res
 
 
 @tracked_tool()
-async def memory_query(query: str, group_id: str, symbol: str = "") -> list[dict]:
-    """Targeted memory lookup, optionally filtered to facts anchored to a code symbol."""
+async def memory_query(query: str, group_id: str = "", symbol: str = "") -> list[dict]:
+    """Targeted memory lookup filtered to facts anchored to one code symbol —
+    use when you already know WHICH function/module you're touching and want
+    only the decisions attached to it (memory_search for the broad version)."""
+    if not group_id:
+        return [_missing_gid()]
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _memory_query, query, group_id, symbol or None)
 
@@ -170,11 +234,13 @@ async def memory_delete(id: str, group_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @tracked_tool()
-async def graph_overview(group_id: str) -> dict:
+async def graph_overview(group_id: str = "") -> dict:
     """Orient yourself in the project graph in ONE call: node counts by type
     (code / memory / roadmap), 5 latest memories, active milestones with
     progress, and currently claimed tasks. Call this at the start of a task
     instead of exploring the repo manually."""
+    if not group_id:
+        return _missing_gid()
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _graph_overview, group_id)
 
@@ -263,31 +329,40 @@ async def roadmap_export(group_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 @tracked_tool()
-async def impact_of(symbol: str, group_id: str, depth: int = 3) -> list[dict]:
-    """Return CodeChunks reachable via CALLS edges from *symbol* (up to *depth* hops).
-    Use this to find what code may be affected by a change to a given function."""
+async def impact_of(symbol: str, group_id: str = "", depth: int = 3) -> list[dict]:
+    """BEFORE changing a function: what code may be affected? Returns
+    CodeChunks reachable via CALLS edges from *symbol* (up to *depth* hops) —
+    graph traversal, no manual exploration needed."""
+    if not group_id:
+        return [_missing_gid()]
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _impact_of, symbol, group_id, depth)
 
 
 @tracked_tool()
-async def callers_of(symbol: str, group_id: str, depth: int = 1) -> list[dict]:
-    """Return CodeChunks that call *symbol*, up to *depth* hops upstream.
-    depth=1 returns direct callers only."""
+async def callers_of(symbol: str, group_id: str = "", depth: int = 1) -> list[dict]:
+    """Who calls *symbol*? Use instead of a manual Grep for call sites.
+    Returns CodeChunks up to *depth* hops upstream (depth=1 = direct callers)."""
+    if not group_id:
+        return [_missing_gid()]
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _callers_of, symbol, group_id, depth)
 
 
 @tracked_tool()
-async def imports_of(file: str, group_id: str) -> list[dict]:
+async def imports_of(file: str, group_id: str = "") -> list[dict]:
     """Return files directly imported by *file* (IMPORTS edges from FileNode)."""
+    if not group_id:
+        return [_missing_gid()]
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _imports_of, file, group_id)
 
 
 @tracked_tool()
-async def imported_by(file: str, group_id: str) -> list[dict]:
+async def imported_by(file: str, group_id: str = "") -> list[dict]:
     """Return files that import *file* (reverse IMPORTS traversal)."""
+    if not group_id:
+        return [_missing_gid()]
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _imported_by, file, group_id)
 

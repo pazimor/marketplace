@@ -1,20 +1,75 @@
 """
 Hybrid code search: vector (semantic) + full-text (lexical) fused with RRF.
+
+Result contract (adoption-driven, see route_stats):
+  - every hit carries a `snippet` (first lines of the chunk, sliced from the
+    bind-mounted source file) so a hit is judgeable without a follow-up
+    code_fetch/Read;
+  - native scores are exposed (`vec_similarity`, `text_score`) instead of the
+    opaque cumulated RRF number (kept as `rank_score`, ranking only);
+  - the envelope carries an honest non-exhaustiveness note: semantic top-k
+    can silently miss occurrences — Grep remains the literal sweep tool.
 """
 from __future__ import annotations
 
+import re
 import time
+from pathlib import Path
 
 from ..config import config
 from ..db import get_graph
 from ..embedder import embed
+
+SNIPPET_LINES = 8
+
+NOTE = (
+    "top-k hybrid (semantic+keyword) search — NOT exhaustive. For a complete "
+    "literal sweep (rename, refactor, count of occurrences) use Grep."
+)
 
 
 def _rrf_score(rank: int, k: int = 60) -> float:
     return 1.0 / (k + rank)
 
 
-def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
+def _ft_query(query: str) -> str:
+    """Build an OR full-text query from the raw user query.
+
+    RediSearch ANDs space-separated terms, so a multi-word conceptual query
+    ("distiller ledger idempotence") matches nothing lexically. OR-ing the
+    terms lets each contribute; RRF ranks the overlap on top.
+    """
+    terms = re.findall(r"[A-Za-z0-9_]{2,}", query)
+    seen: list[str] = []
+    for t in terms:
+        if t.lower() not in {s.lower() for s in seen}:
+            seen.append(t)
+    return "|".join(seen) if seen else query
+
+
+def _snippet(path: str, start_line: int, end_line: int,
+             cache: dict[str, list[str] | None]) -> str | None:
+    """First SNIPPET_LINES of the chunk, sliced from the source file.
+
+    Best-effort: returns None when the file is unreadable or has shifted
+    (stale index) — never raises."""
+    try:
+        if path not in cache:
+            cache[path] = Path(path).read_text(errors="replace").splitlines()
+        lines = cache[path]
+        if lines is None:
+            return None
+        sl = max(1, int(start_line))
+        el = min(len(lines), int(end_line), sl + SNIPPET_LINES - 1)
+        if sl > len(lines):
+            return None
+        return "\n".join(lines[sl - 1 : el])
+    except OSError:
+        cache[path] = None
+        return None
+
+
+def code_search(query: str, group_id: str, k: int = 10) -> dict:
     g = get_graph(group_id)
     vec = embed(query, purpose="code")
 
@@ -32,7 +87,7 @@ def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
         {"vec": vec, "k": k * 2},
     )
 
-    # --- Full-text ---
+    # --- Full-text (OR over terms — see _ft_query) ---
     ft_result = g.query(
         f"""
         CALL db.idx.fulltext.queryNodes('CodeChunk', $q)
@@ -42,10 +97,10 @@ def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
                node.signature, node.start_line, node.end_line, score
         LIMIT $k
         """,
-        {"q": query, "k": k * 2},
+        {"q": _ft_query(query), "k": k * 2},
     )
 
-    # --- RRF fusion ---
+    # --- RRF fusion (ranking) + native scores (relevance signal) ---
     scores: dict[str, float] = {}
     meta: dict[str, dict] = {}
 
@@ -64,6 +119,11 @@ def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
                     "start_line": sl,
                     "end_line": el,
                 }
+            if source == "vec":
+                # FalkorDB yields cosine DISTANCE (0 = identical) — invert.
+                meta[nid]["vec_similarity"] = round(1.0 - float(sc), 4)
+            else:
+                meta[nid]["text_score"] = round(float(sc), 4)
 
     _register(vec_result.result_set, "vec")
     _register(ft_result.result_set, "ft")
@@ -78,9 +138,16 @@ def code_search(query: str, group_id: str, k: int = 10) -> list[dict]:
             {"id": nid, "now": now},
         )
 
-    out = [meta[nid] | {"score": sc} for nid, sc in ranked if nid in meta]
+    file_cache: dict[str, list[str] | None] = {}
+    out = []
+    for nid, sc in ranked:
+        if nid not in meta:
+            continue
+        hit = meta[nid] | {"rank_score": round(sc, 5)}
+        hit["snippet"] = _snippet(hit["path"], hit["start_line"], hit["end_line"], file_cache)
+        out.append(hit)
 
     from .stats import record_search
     record_search(group_id, out)
 
-    return out
+    return {"results": out, "note": NOTE}

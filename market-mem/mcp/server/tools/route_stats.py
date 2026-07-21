@@ -97,6 +97,32 @@ def record(name: str, ok: bool = True) -> None:
         log.debug("route stats record skipped: %s", exc)
 
 
+MAX_RECENT_QUERIES = 50
+
+
+def record_query(name: str, query: str, hits: int) -> None:
+    """Log one search query for *name* (recent queries + empty-result rate).
+
+    Adoption instrument: /mcp-stats exposes what agents actually ask and how
+    often they get nothing back. Best-effort, never raises."""
+    try:
+        now = _now_ms()
+        with _lock:
+            _load_locked()
+            rec = _routes.setdefault(
+                name, {"calls": 0, "errors": 0, "first_used": now, "last_used": now}
+            )
+            recent = rec.setdefault("recent_queries", [])
+            recent.append({"q": str(query)[:200], "hits": int(hits), "ts": now})
+            del recent[:-MAX_RECENT_QUERIES]
+            rec["query_count"] = rec.get("query_count", 0) + 1
+            if hits == 0:
+                rec["empty_results"] = rec.get("empty_results", 0) + 1
+            _flush_locked()
+    except Exception as exc:  # pragma: no cover - defensive
+        log.debug("route stats query log skipped: %s", exc)
+
+
 def track(func):
     """Decorator: register the route and count every (async) invocation."""
     name = func.__name__
