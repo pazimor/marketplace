@@ -125,7 +125,7 @@ def _get_parser(ext: str) -> Parser | None:
 
 
 # ---------------------------------------------------------------------------
-# Call node specifications (certitude only — identifier targets only)
+# Call node specifications
 # ---------------------------------------------------------------------------
 # Format: ext -> (call_node_type, name_field | None, accepted_id_types)
 # name_field=None → use first child of type in accepted_id_types
@@ -148,7 +148,9 @@ _CALL_SPECS: dict[str, tuple[str, str | None, frozenset[str]]] = {
     "cc":    ("call_expression",         "function",   frozenset({"identifier"})),
     "cxx":   ("call_expression",         "function",   frozenset({"identifier"})),
     "hpp":   ("call_expression",         "function",   frozenset({"identifier"})),
-    "cs":    ("invocation_expression",   "expression", frozenset({"identifier"})),
+    # tree-sitter-c-sharp: invocation_expression's callee field is "function"
+    # (identifier for Foo(), member_access_expression for obj.Bar())
+    "cs":    ("invocation_expression",   "function",   frozenset({"identifier"})),
     "rb":    ("call",                    "method",     frozenset({"identifier"})),
     "php":   ("function_call_expression","function",   frozenset({"name", "identifier"})),
     "kt":    ("call_expression",         None,         frozenset({"simple_identifier"})),
@@ -157,31 +159,77 @@ _CALL_SPECS: dict[str, tuple[str, str | None, frozenset[str]]] = {
     "lua":   ("function_call",           None,         frozenset({"identifier"})),
 }
 
+# Member-access callee nodes: when the call target is one of these node
+# types, the terminal method name lives in the given field.
+# Verified against the installed tree-sitter grammars (see probe in tests).
+_MEMBER_SPECS: dict[str, dict[str, str]] = {
+    "py":    {"attribute": "attribute"},                                    # self.bar() / a.b.c()
+    "js":    {"member_expression": "property"},                             # obj.bar()
+    "jsx":   {"member_expression": "property"},
+    "mjs":   {"member_expression": "property"},
+    "cjs":   {"member_expression": "property"},
+    "ts":    {"member_expression": "property"},
+    "tsx":   {"member_expression": "property"},
+    "mts":   {"member_expression": "property"},
+    "go":    {"selector_expression": "field"},                              # obj.Bar()
+    "rs":    {"field_expression": "field", "scoped_identifier": "name"},    # obj.bar() / m::n()
+    "c":     {"field_expression": "field"},                                 # s.bar() / p->baz()
+    "h":     {"field_expression": "field"},
+    "cpp":   {"field_expression": "field", "qualified_identifier": "name"}, # + ns::qux()
+    "cc":    {"field_expression": "field", "qualified_identifier": "name"},
+    "cxx":   {"field_expression": "field", "qualified_identifier": "name"},
+    "hpp":   {"field_expression": "field", "qualified_identifier": "name"},
+    "cs":    {"member_access_expression": "name"},                          # obj.Bar() / this.X.Qux()
+    # java: method_invocation's "name" field is already the terminal
+    # identifier even for obj.bar() — nothing extra needed.
+}
+
+# Node types accepted as the terminal method-name node of a member access.
+_TERMINAL_ID_TYPES = frozenset({
+    "identifier", "property_identifier", "field_identifier",
+    "simple_identifier", "name",
+})
+
 
 def _extract_calls(fn_node: Node, ext: str) -> list[str]:
-    """Return callee names called within *fn_node* body (direct identifiers only)."""
+    """Return callee names called within *fn_node* body.
+
+    Handles both bare identifiers (``foo()``) and member accesses
+    (``obj.foo()`` / ``ptr->foo()`` / ``ns::foo()``) — for member accesses
+    the terminal method name is extracted.
+    """
     spec = _CALL_SPECS.get(ext)
     if not spec:
         return []
     call_type, name_field, id_types = spec
+    member_spec = _MEMBER_SPECS.get(ext, {})
 
     results: list[str] = []
+
+    def _target_name(target: Node) -> str | None:
+        if target.type in id_types:
+            return target.text.decode("utf-8", errors="replace").strip() or None
+        field = member_spec.get(target.type)
+        if field:
+            name_node = target.child_by_field_name(field)
+            if name_node and name_node.type in _TERMINAL_ID_TYPES:
+                return name_node.text.decode("utf-8", errors="replace").strip() or None
+        return None
 
     def _walk(n: Node) -> None:
         if n.type == call_type:
             if name_field:
                 target = n.child_by_field_name(name_field)
-                if target and target.type in id_types:
-                    name = target.text.decode("utf-8", errors="replace").strip()
+                if target:
+                    name = _target_name(target)
                     if name:
                         results.append(name)
             else:
-                # Find the first child whose type is an accepted identifier
+                # Find the first child that yields a name (identifier or member)
                 for child in n.children:
-                    if child.type in id_types:
-                        name = child.text.decode("utf-8", errors="replace").strip()
-                        if name:
-                            results.append(name)
+                    name = _target_name(child)
+                    if name:
+                        results.append(name)
                         break
         for child in n.children:
             _walk(child)
@@ -611,6 +659,7 @@ class FileAnalysis:
     ext: str
     imported_paths: list[str] = field(default_factory=list)  # resolved absolute paths
     chunk_calls: dict[str, list[str]] = field(default_factory=dict)  # chunk_id → callee names
+    local_symbols: dict[str, list[str]] = field(default_factory=dict)  # terminal name → chunk_ids in THIS file
 
 
 def _chunk_id(path: str, symbol: str) -> str:
@@ -715,6 +764,8 @@ def _analyze_file(path: str, ext: str, code: bytes, repo_root: str, all_paths: s
             symbol = _symbol_from_node(node, parent_path, ext)
             if symbol:
                 cid = _chunk_id(path, symbol)
+                terminal = symbol.rsplit(".", 1)[-1]
+                analysis.local_symbols.setdefault(terminal, []).append(cid)
                 calls = _extract_calls(node, ext)
                 if calls:
                     analysis.chunk_calls[cid] = calls
@@ -743,81 +794,247 @@ def _file_node_id(path: str) -> str:
     return hashlib.sha256(path.encode()).hexdigest()[:32]
 
 
-def _upsert_file_node(g, group_id: str, path: str, ext: str) -> None:
-    fid = _file_node_id(path)
-    now = int(time.time() * 1000)
-    g.query(
-        """
-        MERGE (f:FileNode {id: $id})
-        SET f.group_id = $gid,
-            f.path     = $path,
-            f.ext      = $ext,
-            f.updated_at = $now,
-            f.created_at = COALESCE(f.created_at, $now)
-        """,
-        {"id": fid, "gid": group_id, "path": path, "ext": ext, "now": now},
-    )
-
-
-def _write_imports(g, group_id: str, source_path: str, target_paths: list[str]) -> None:
-    """Create IMPORTS edges between FileNodes."""
-    if not target_paths:
+def _upsert_file_nodes(g, group_id: str, entries: list[tuple[str, str]]) -> None:
+    """Batch-upsert FileNodes. *entries* = list of (path, ext)."""
+    if not entries:
         return
-    src_id = _file_node_id(source_path)
-    for tgt_path in target_paths:
-        tgt_id = _file_node_id(tgt_path)
+    now = int(time.time() * 1000)
+    rows = [
+        {"id": _file_node_id(p), "path": p, "ext": e}
+        for p, e in dict.fromkeys(entries)  # dedupe, keep order
+    ]
+    for i in range(0, len(rows), _EDGE_BATCH):
         g.query(
             """
-            MATCH (s:FileNode {id: $src})
-            MATCH (t:FileNode {id: $tgt})
+            UNWIND $files AS f
+            MERGE (n:FileNode {id: f.id})
+            SET n.group_id = $gid,
+                n.path     = f.path,
+                n.ext      = f.ext,
+                n.updated_at = $now,
+                n.created_at = COALESCE(n.created_at, $now)
+            """,
+            {"files": rows[i:i + _EDGE_BATCH], "gid": group_id, "now": now},
+        )
+
+
+def _write_imports(g, import_pairs: list[tuple[str, str]]) -> None:
+    """Batch-create IMPORTS edges. *import_pairs* = list of (source_path, target_path)."""
+    if not import_pairs:
+        return
+    rows = [
+        {"src": _file_node_id(s), "tgt": _file_node_id(t)}
+        for s, t in dict.fromkeys(import_pairs)
+    ]
+    for i in range(0, len(rows), _EDGE_BATCH):
+        g.query(
+            """
+            UNWIND $pairs AS p
+            MATCH (s:FileNode {id: p.src})
+            MATCH (t:FileNode {id: p.tgt})
             MERGE (s)-[:IMPORTS]->(t)
             """,
-            {"src": src_id, "tgt": tgt_id},
+            {"pairs": rows[i:i + _EDGE_BATCH]},
         )
 
 
-def _write_calls(g, group_id: str, chunk_calls: dict[str, list[str]]) -> None:
-    """Resolve callee names → CodeChunk ids and create CALLS edges.
-    Certitude policy: only create edge when exactly ONE CodeChunk in group_id
-    has a symbol ending in .<callee_name> (or equals it).
+# ---------------------------------------------------------------------------
+# CALLS resolution — blocklist + hierarchical certainty
+# ---------------------------------------------------------------------------
+
+# Ultra-common method/function names (case-insensitive).  Linking on these
+# by global name match produces mostly false positives, so they only ever
+# resolve same-file.
+_COMMON_NAMES = frozenset({
+    # object protocol / stdlib-ish
+    "tostring", "equals", "gethashcode", "gettype", "compareto", "hashcode",
+    "clone", "copy", "deepcopy", "dispose", "finalize", "str", "repr", "hash",
+    "iter", "len", "enter", "exit", "call", "new", "delete", "free",
+    # lifecycle
+    "main", "init", "initialize", "setup", "teardown", "configure", "create",
+    "build", "make", "start", "stop", "restart", "reset", "run", "execute",
+    "exec", "invoke", "apply", "begin", "end", "open", "close", "shutdown",
+    # accessors / mutators
+    "get", "set", "add", "remove", "insert", "push", "pop", "append",
+    "extend", "update", "clear", "put", "fetch", "peek",
+    # I/O & messaging
+    "read", "write", "load", "save", "store", "send", "receive", "emit",
+    "fire", "notify", "publish", "subscribe", "unsubscribe", "connect",
+    "disconnect", "bind", "unbind", "register", "unregister", "flush",
+    "sync", "wait", "sleep", "lock", "unlock", "acquire", "release",
+    # transforms
+    "parse", "format", "encode", "decode", "serialize", "deserialize",
+    "tojson", "fromjson", "toarray", "tolist", "todict", "tostr",
+    "convert", "transform", "replace", "split", "join", "trim", "strip",
+    "tolower", "toupper", "substring", "slice", "concat",
+    # validation / control
+    "handle", "process", "check", "validate", "verify", "test", "match",
+    "resolve", "reject", "then", "next", "prev", "first", "last", "accept",
+    "visit", "dispatch", "filter", "map", "reduce", "sort", "compare",
+    # queries
+    "count", "size", "length", "contains", "exists", "find", "search",
+    "index", "indexof", "keys", "values", "items", "name", "value", "type",
+    "data", "result", "status", "info",
+    # logging / UI
+    "log", "print", "debug", "warn", "error", "trace", "render", "draw",
+    "refresh", "show", "hide", "toggle", "focus",
+})
+
+_CAND_LIMIT = 16      # names with more global candidates than this are never linked
+_MAX_PROBABLE = 5     # 2..5 candidates → probable edges; more → nothing
+_NAME_BATCH = 5000    # names per resolution query
+_EDGE_BATCH = 2000    # edges per UNWIND write
+_FILE_BATCH = 500     # files analyzed per flush (bounds RAM on huge repos)
+
+
+def _is_common_name(name: str) -> bool:
+    return len(name) < 3 or name.lower() in _COMMON_NAMES
+
+
+def _fetch_candidates(g, group_id: str, names: set[str], cache: dict) -> None:
+    """Populate *cache* (name → list[{id, path}] | None) for unknown *names*.
+
+    None means "too many candidates" (> _CAND_LIMIT), [] means no match.
+    Two-phase: a cheap count query first, then candidates only for names
+    with a bounded candidate set — keeps payloads small on huge repos.
     """
-    if not chunk_calls:
-        return
-
-    for src_cid, callee_names in chunk_calls.items():
-        # Verify source chunk exists AND is valid
-        exists = g.query(
-            "MATCH (c:CodeChunk {id: $id, valid: true}) RETURN c.id LIMIT 1",
-            {"id": src_cid},
+    # Matching is on the indexed term_name property (= last dotted segment of
+    # symbol, written at ingestion + backfilled by ensure_schema).  This is
+    # exactly equivalent to the old `symbol = name OR symbol ENDS WITH '.'+name`
+    # (an undotted symbol's term_name IS the whole symbol) but index-served —
+    # ENDS WITH forced a names × chunks cartesian scan that timed out on
+    # kernel-sized repos.
+    todo = [n for n in names if n not in cache]
+    for i in range(0, len(todo), _NAME_BATCH):
+        chunk = todo[i:i + _NAME_BATCH]
+        res = g.query(
+            """
+            UNWIND $names AS name
+            MATCH (c:CodeChunk {term_name: name})
+            WHERE c.group_id = $gid AND c.valid = true
+            RETURN name, count(c)
+            """,
+            {"names": chunk, "gid": group_id},
         )
-        if not exists.result_set:
+        counts = {row[0]: int(row[1]) for row in res.result_set}
+        shortlist = []
+        for n in chunk:
+            cnt = counts.get(n, 0)
+            if cnt == 0:
+                cache[n] = []
+            elif cnt > _CAND_LIMIT:
+                cache[n] = None
+            else:
+                shortlist.append(n)
+        for j in range(0, len(shortlist), _NAME_BATCH):
+            res2 = g.query(
+                """
+                UNWIND $names AS name
+                MATCH (c:CodeChunk {term_name: name})
+                WHERE c.group_id = $gid AND c.valid = true
+                RETURN name, collect({id: c.id, path: c.path})
+                """,
+                {"names": shortlist[j:j + _NAME_BATCH], "gid": group_id},
+            )
+            for row in res2.result_set:
+                cache[row[0]] = list(row[1])
+
+
+def _write_call_edges(g, pairs: list[tuple[str, str]], certainty: str) -> int:
+    """Batch-create CALLS edges with a certainty property.  Returns edges created."""
+    if not pairs:
+        return 0
+    rows = [{"src": s, "tgt": t} for s, t in dict.fromkeys(pairs)]
+    created = 0
+    for i in range(0, len(rows), _EDGE_BATCH):
+        res = g.query(
+            """
+            UNWIND $pairs AS p
+            MATCH (s:CodeChunk {id: p.src, valid: true})
+            MATCH (t:CodeChunk {id: p.tgt})
+            MERGE (s)-[r:CALLS]->(t)
+            SET r.certainty = $certainty
+            """,
+            {"pairs": rows[i:i + _EDGE_BATCH], "certainty": certainty},
+        )
+        created += int(getattr(res, "relationships_created", 0) or 0)
+    return created
+
+
+def _resolve_and_write_calls(
+    g, group_id: str, analyses: list[FileAnalysis], cache: dict,
+) -> tuple[int, int]:
+    """Resolve callee names for a batch of analyses and write CALLS edges.
+
+    Hierarchical resolution:
+      1. single candidate in the SAME file          → certain
+      2. single candidate in a file IMPORTED by src → certain
+      3. single candidate repo-wide (uncommon name) → certain
+      4. 2..5 candidates repo-wide (uncommon name)  → probable (one edge each)
+      5. >5 candidates, or common name unresolved locally → nothing
+
+    Returns (certain_created, probable_created).
+    """
+    sites: list[tuple[str, str, FileAnalysis]] = []
+    db_names: set[str] = set()
+    for a in analyses:
+        for src_cid, callees in a.chunk_calls.items():
+            for name in dict.fromkeys(callees):
+                sites.append((src_cid, name, a))
+                # DB lookup only needed when same-file can't settle it alone
+                if not _is_common_name(name) and len(a.local_symbols.get(name, [])) != 1:
+                    db_names.add(name)
+
+    if not sites:
+        return 0, 0
+
+    _fetch_candidates(g, group_id, db_names, cache)
+
+    certain: list[tuple[str, str]] = []
+    probable: list[tuple[str, str]] = []
+
+    for src_cid, name, a in sites:
+        # Tier 1 — same file (works even for common names)
+        local = list(dict.fromkeys(a.local_symbols.get(name, [])))
+        if local:
+            if len(local) == 1 and local[0] != src_cid:
+                certain.append((src_cid, local[0]))
+            # multiple same-file candidates → ambiguous; recursion → no self edge
             continue
 
-        for callee in callee_names:
-            # Look for CodeChunks whose symbol ends with .callee or equals callee
-            result = g.query(
-                """
-                MATCH (c:CodeChunk)
-                WHERE c.group_id = $gid
-                  AND c.valid = true
-                  AND (c.symbol = $name OR c.symbol ENDS WITH $dotname)
-                RETURN c.id
-                LIMIT 2
-                """,
-                {"gid": group_id, "name": callee, "dotname": f".{callee}"},
-            )
-            rows = result.result_set
-            if len(rows) == 1:
-                tgt_cid = rows[0][0]
-                if tgt_cid != src_cid:
-                    g.query(
-                        """
-                        MATCH (s:CodeChunk {id: $src})
-                        MATCH (t:CodeChunk {id: $tgt})
-                        MERGE (s)-[:CALLS]->(t)
-                        """,
-                        {"src": src_cid, "tgt": tgt_cid},
-                    )
+        # Tier 2+ requires an uncommon name
+        if _is_common_name(name):
+            continue
+
+        cands = cache.get(name)
+        if not cands:  # [] (no match) or None (too many)
+            continue
+
+        pool = [c for c in cands if c["id"] != src_cid]
+        if not pool:
+            continue
+
+        # Tier 2 — unique candidate in a file imported by the source file
+        imported_set = set(a.imported_paths)
+        if imported_set:
+            imported = [c for c in pool if c["path"] in imported_set]
+            if len(imported) == 1:
+                certain.append((src_cid, imported[0]["id"]))
+                continue
+
+        # Tier 3 — unique repo-wide
+        if len(pool) == 1:
+            certain.append((src_cid, pool[0]["id"]))
+        # Tier 4 — small ambiguity → probable edges
+        elif len(pool) <= _MAX_PROBABLE:
+            for c in pool:
+                probable.append((src_cid, c["id"]))
+        # Tier 5 — too ambiguous → nothing
+
+    # Write probable first so a pair that is also certain ends up "certain"
+    n_probable = _write_call_edges(g, probable, "probable")
+    n_certain = _write_call_edges(g, certain, "certain")
+    return n_certain, n_probable
 
 
 def _purge_file_edges(g, source_path: str) -> None:
@@ -888,68 +1105,101 @@ def _walk_repo(repo_path: str) -> Iterator[tuple[str, str]]:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _flush_batch(g, group_id: str, batch: list[FileAnalysis], cache: dict) -> tuple[int, int, int]:
+    """Persist one batch of analyses (FileNodes + IMPORTS + CALLS).
+    Returns (imports_created, calls_certain, calls_probable)."""
+    if not batch:
+        return 0, 0, 0
+
+    # FileNodes: sources + import targets, one UNWIND merge
+    file_entries: list[tuple[str, str]] = []
+    import_pairs: list[tuple[str, str]] = []
+    for a in batch:
+        file_entries.append((a.path, a.ext))
+        for tp in a.imported_paths:
+            file_entries.append((tp, Path(tp).suffix.lstrip(".")))
+            import_pairs.append((a.path, tp))
+    _upsert_file_nodes(g, group_id, file_entries)
+    _write_imports(g, import_pairs)
+
+    n_certain, n_probable = _resolve_and_write_calls(g, group_id, batch, cache)
+    return len(import_pairs), n_certain, n_probable
+
+
 def build_graph(group_id: str, repo_path: str) -> dict:
     """
     Build / refresh the full call graph for *repo_path*.
-    Idempotent (MERGE semantics).  Called after bulk ingest.
+    Idempotent (MERGE semantics).  Called after bulk ingest (CodeChunks must
+    already be in the DB).
+
+    Single analysis pass, streamed in batches of _FILE_BATCH files so a
+    kernel-sized repo never holds every FileAnalysis in RAM at once.
     """
     from .db import get_graph
 
     g = get_graph(group_id)
 
-    # Collect all repo paths for import resolution
+    # Collect all repo paths for import resolution (paths only — cheap)
     all_paths: set[str] = set()
     file_list: list[tuple[str, str]] = []
     for fpath, ext in _walk_repo(repo_path):
         all_paths.add(fpath)
         file_list.append((fpath, ext))
 
-    total = 0
-    imports_created = calls_created = errors = 0
+    total = imports_created = calls_certain = calls_probable = errors = 0
+    cache: dict = {}  # callee name → candidates (shared across batches)
+    batch: list[FileAnalysis] = []
+    t0 = time.time()
 
-    for fpath, ext in file_list:
+    def _flush() -> None:
+        nonlocal imports_created, calls_certain, calls_probable, batch
+        imp, cert, prob = _flush_batch(g, group_id, batch, cache)
+        imports_created += imp
+        calls_certain += cert
+        calls_probable += prob
+        batch = []
+
+    for idx, (fpath, ext) in enumerate(file_list, 1):
         try:
             code = Path(fpath).read_bytes()
-            analysis = _analyze_file(fpath, ext, code, repo_path, all_paths)
-
-            # Upsert FileNode
-            _upsert_file_node(g, group_id, fpath, ext)
-
-            # IMPORTS edges
-            if analysis.imported_paths:
-                # Ensure target FileNodes exist first
-                for tp in analysis.imported_paths:
-                    _upsert_file_node(g, group_id, tp, Path(tp).suffix.lstrip("."))
-                _write_imports(g, group_id, fpath, analysis.imported_paths)
-                imports_created += len(analysis.imported_paths)
-
+            batch.append(_analyze_file(fpath, ext, code, repo_path, all_paths))
             total += 1
         except Exception as exc:
             log.warning("graph_builder: file error %s — %s", fpath, exc)
             errors += 1
 
-    # CALLS edges — second pass (all chunks must be in DB first)
-    for fpath, ext in file_list:
-        try:
-            code = Path(fpath).read_bytes()
-            analysis = _analyze_file(fpath, ext, code, repo_path, all_paths)
-            if analysis.chunk_calls:
-                _write_calls(g, group_id, analysis.chunk_calls)
-                calls_created += sum(len(v) for v in analysis.chunk_calls.values())
-        except Exception as exc:
-            log.warning("graph_builder: calls pass error %s — %s", fpath, exc)
+        if len(batch) >= _FILE_BATCH:
+            _flush()
+        if idx % 1000 == 0:
+            log.info(
+                "build_graph progress — %d/%d files (%.0fs) imports=%d "
+                "calls_certain=%d calls_probable=%d errors=%d",
+                idx, len(file_list), time.time() - t0,
+                imports_created, calls_certain, calls_probable, errors,
+            )
+
+    _flush()
 
     log.info(
-        "build_graph done — files=%d imports=%d calls_candidates=%d errors=%d",
-        total, imports_created, calls_created, errors,
+        "build_graph done — files=%d imports=%d calls_certain=%d "
+        "calls_probable=%d errors=%d (%.0fs)",
+        total, imports_created, calls_certain, calls_probable, errors,
+        time.time() - t0,
     )
-    return {"files": total, "imports": imports_created, "calls_candidates": calls_created, "errors": errors}
+    return {
+        "files": total,
+        "imports": imports_created,
+        "calls_certain": calls_certain,
+        "calls_probable": calls_probable,
+        "errors": errors,
+    }
 
 
 def rebuild_file_graph(group_id: str, file_path: str, repo_path: str) -> dict:
     """
     Incremental graph update for one file (PostToolUse / reindex_file).
-    Purges old edges then re-derives.
+    Purges old edges then re-derives with the same hierarchical resolution
+    as build_graph.
     """
     from .db import get_graph
 
@@ -977,17 +1227,16 @@ def rebuild_file_graph(group_id: str, file_path: str, repo_path: str) -> dict:
 
     analysis = _analyze_file(file_path, ext, code, repo_path, all_paths)
 
-    _upsert_file_node(g, group_id, file_path, ext)
+    _upsert_file_nodes(g, group_id, [(file_path, ext)] + [
+        (tp, Path(tp).suffix.lstrip(".")) for tp in analysis.imported_paths
+    ])
+    _write_imports(g, [(file_path, tp) for tp in analysis.imported_paths])
 
-    if analysis.imported_paths:
-        for tp in analysis.imported_paths:
-            _upsert_file_node(g, group_id, tp, Path(tp).suffix.lstrip("."))
-        _write_imports(g, group_id, file_path, analysis.imported_paths)
-
-    if analysis.chunk_calls:
-        _write_calls(g, group_id, analysis.chunk_calls)
+    n_certain, n_probable = _resolve_and_write_calls(g, group_id, [analysis], {})
 
     return {
         "imports": len(analysis.imported_paths),
         "call_sources": len(analysis.chunk_calls),
+        "calls_certain": n_certain,
+        "calls_probable": n_probable,
     }
