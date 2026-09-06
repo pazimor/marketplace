@@ -1,0 +1,5 @@
+{
+  "name": "roadmap",
+  "version": "0.1.0",
+  "description": "Roadmap fichier pour Claude Code — specs canon, milestones avec DoD, tâches à IDs stables et claims, tenue dans la mémoire auto native avec miroir versionné dans le repo (.claude/roadmap.md). Sans serveur MCP : portable d'une machine à l'autre via git."
+}

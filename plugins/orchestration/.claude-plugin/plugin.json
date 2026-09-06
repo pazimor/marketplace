@@ -1,0 +1,5 @@
+{
+  "name": "orchestration",
+  "version": "0.1.0",
+  "description": "Orchestration Fable → Opus pour Claude Code — le modèle non-codeur reformule, questionne, cadre et découpe, puis délègue chaque tâche scopée à un agent Opus ; gate de lecture canon + roadmap avant toute délégation, vérification du critère de succès au retour, et rituel de capture de l'implicite à la clôture."
+}

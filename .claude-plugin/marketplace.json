@@ -11,6 +11,16 @@
       "name": "memory",
       "source": "./plugins/memory",
       "description": "Project graph for Claude Code — code index (bulk, zero-LLM), episodic memory distilled from past transcripts (extractor haiku → arbiter sonnet), structured roadmap with backlog/claims/DoD, orchestrator + worker + roadmapper agents, via FalkorDB"
+    },
+    {
+      "name": "roadmap",
+      "source": "./plugins/roadmap",
+      "description": "File-based roadmap in native Claude Code auto memory — specs canon, milestones with DoD, stable task IDs and claims, mirrored to the repo (.claude/roadmap.md) for cross-machine portability. No MCP server required"
+    },
+    {
+      "name": "orchestration",
+      "source": "./plugins/orchestration",
+      "description": "Fable → Opus orchestration — the non-coding model reframes, questions, scopes and splits the work, then delegates each scoped task to an Opus agent: mandatory canon + roadmap read gate before delegating, success criteria verified on return, and a closing ritual that captures the implicit into the canon"
     }
   ]
 }
