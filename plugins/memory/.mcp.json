@@ -2,7 +2,10 @@
   "mcpServers": {
     "memory": {
       "type": "sse",
-      "url": "https://127.0.0.1:7333/mcp/sse"
+      "url": "https://${MEM_HOST:-127.0.0.1}:${MEM_PORT:-7333}/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer ${MEM_TOKEN:-}"
+      }
     }
   }
 }

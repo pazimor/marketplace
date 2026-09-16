@@ -52,7 +52,9 @@ Both are on an internal Docker network (`mem-net`). Hooks on the host talk only 
 
 **Key invariants:**
 - Code is stored **by reference** (`path + [start_line, end_line]`), never copied into the DB
+- Stored paths are **repo-relative**, and node ids derive from them (`sha256(rel_path::symbol)`) — two machines indexing the same repo must converge on the same nodes, never duplicate them. Absolute paths only ever exist in memory, while walking the filesystem
 - `content_hash` gates re-embedding — only changed symbols are re-embedded
+- A full ingest **owns the whole chunk set**: whatever it doesn't re-derive is swept (`seen_at` mark-and-sweep), mirroring the call graph's edge purge
 - Vector index uses `MAX_DIM = 2048` with zero-padding; switching embedding models = recompute, never index recreation
 - Embedding models: `microsoft/graphcodebert-base` (code, 768d) and `nomic-ai/nomic-embed-text-v1.5` (memory, 768d)
 - `group_id` = `hash(git remote URL)` (fallback: `hash(repo_path)`); one FalkorDB graph per project
@@ -63,6 +65,14 @@ Both are on an internal Docker network (`mem-net`). Hooks on the host talk only 
 **Safe writes (exposed to master):** `memory_immunize`, `memory_release`, `memory_extend`
 
 **Hidden writes (distiller/debug only):** `memory_add`, `memory_delete`, `code_add`, `code_edit`, `code_delete`
+
+### Remote clients (one server, several machines)
+The stack runs on one machine; other machines connect to it over the network.
+- Auth: shared bearer token (`MEM_TOKEN`) on every route but `/health`. The server **refuses to start** unauthenticated when the port isn't loopback-bound
+- `market install --expose` on the server, `market install --client-only` on the other machine (needs `MEM_HOST` + `MEM_TOKEN`, and the mkcert CA at `~/.config/market/ca.pem`)
+- Memory and roadmap work unchanged — they never touch a path
+- Code: the server can't read a remote client's files, so it indexes **its own git clone** (`POST /ingest {git_url}` → `/data/repos/<gid>`). The index tracks the last *pushed* commit, surfaced as `indexed_commit` on every read so stale answers are visible
+- Unpushed edits still land via `POST /reindex {rel_path, content}`; the call graph waits for the next mirror ingest
 
 ### Hook design
 | Hook | Action |
@@ -102,3 +112,11 @@ There is **no Stop hook** anymore: episodic memory is written by the SessionStar
 - `group_id` hashing: `git remote URL` preferred, `repo_path` fallback (needs confirmation)
 - Whether to cache raw code content alongside the reference (currently: reference only, cache optional)
 - Concurrency lock strategy for multi-session bulk ingest on the same repo
+
+<!-- market-mem:start -->
+## Memory graph (managed by market-mem — do not edit this block)
+This project's graph id: `group_id = "eba78fe1da30f0e9"` — pass it to every memory MCP tool.
+- Conceptual code question ("where is X handled?") → `code_search(group_id="eba78fe1da30f0e9", query=…)` BEFORE Grep/Read.
+- Architecture decision, refactor, or reopening a past choice → `memory_search(group_id="eba78fe1da30f0e9", query=…)` before acting.
+- Empty results are cheap and expected — call speculatively.
+<!-- market-mem:end -->

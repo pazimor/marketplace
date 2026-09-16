@@ -10,13 +10,51 @@ from pathlib import Path
 
 import httpx
 
-MEM_HOST = os.getenv("MEM_HOST", "127.0.0.1")
+# Optional user settings (e.g. {"distill_sync": true, "host": …, "token": …}).
+# Read early: the server address and secret live here on machines that talk to
+# an MCP server running elsewhere (`market install --client-only`).
+SETTINGS_FILE = Path.home() / ".config" / "market" / "settings.json"
+
+
+def market_settings() -> dict:
+    try:
+        return json.loads(SETTINGS_FILE.read_text())
+    except Exception:
+        return {}
+
+
+MEM_HOST = os.getenv("MEM_HOST") or str(market_settings().get("host") or "") or "127.0.0.1"
 MEM_PORT = os.getenv("MEM_PORT", "7333")
 MEM_URL  = f"https://{MEM_HOST}:{MEM_PORT}"
-# Loopback-only connection with a locally-trusted (mkcert) cert. httpx uses the
-# certifi bundle, not the macOS keychain, so skip verification — no MITM risk on
-# 127.0.0.1.
-MEM_VERIFY = False
+
+LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
+def mem_is_remote() -> bool:
+    """True when the MCP server runs on another machine — it then has no access
+    to this machine's filesystem, so path-based operations must be skipped."""
+    return MEM_HOST not in LOOPBACK
+
+
+def mem_verify():
+    """TLS verification policy for the MCP connection.
+
+    Loopback: the mkcert cert is locally trusted but httpx uses the certifi
+    bundle, not the system keychain — verification would fail for no security
+    gain, since there is no MITM risk on 127.0.0.1.
+
+    Remote host: verification is mandatory. httpx still can't see the system
+    trust store, so it needs the mkcert CA explicitly — MEM_CA_BUNDLE, else
+    ~/.config/market/ca.pem, else the default bundle (works if the server has
+    a publicly-trusted cert).
+    """
+    if MEM_HOST in LOOPBACK:
+        return False
+    ca = os.getenv("MEM_CA_BUNDLE") or str(Path.home() / ".config" / "market" / "ca.pem")
+    return ca if Path(ca).exists() else True
+
+
+MEM_VERIFY = mem_verify()
 
 SESSION_LOG_NAME    = ".mcp-memory/session.log"
 
@@ -35,15 +73,17 @@ def is_internal_session() -> bool:
 # file is copied under ~/.claude/plugins/ and repo-relative paths break.
 COMPOSE_POINTER = Path.home() / ".config" / "market" / "compose_path"
 
-# Optional user settings (e.g. {"distill_sync": true}).
-SETTINGS_FILE = Path.home() / ".config" / "market" / "settings.json"
+
+def mem_token() -> str:
+    """Shared secret for the MCP server: MEM_TOKEN env, else settings.json.
+
+    Empty when the server runs unauthenticated (loopback-only setups)."""
+    return os.getenv("MEM_TOKEN") or str(market_settings().get("token") or "")
 
 
-def market_settings() -> dict:
-    try:
-        return json.loads(SETTINGS_FILE.read_text())
-    except Exception:
-        return {}
+def mem_headers() -> dict:
+    tok = mem_token()
+    return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 
 def distill_sync_enabled() -> bool:
@@ -100,6 +140,54 @@ def group_id(repo_path: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+def git_remote_url(repo_path: str) -> str:
+    """origin's URL — what a remote server needs to clone this repo itself."""
+    try:
+        return subprocess.check_output(
+            ["git", "-C", repo_path, "remote", "get-url", "origin"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+    except Exception:
+        return ""
+
+
+def current_branch(repo_path: str) -> str:
+    """Checked-out branch, empty on a detached HEAD (the server then uses the
+    remote's default branch)."""
+    try:
+        branch = subprocess.check_output(
+            ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        return "" if branch == "HEAD" else branch
+    except Exception:
+        return ""
+
+
+# Mirrors MAX_REINDEX_BYTES on the server — don't ship what it will refuse.
+MAX_REINDEX_BYTES = 1_000_000
+
+
+def reindex_payload(gid: str, repo: str, file_path: str) -> dict | None:
+    """Body for a content-carrying /reindex, or None when it can't be built.
+
+    Used against a remote server: it cannot open *file_path*, so the file's
+    text travels with the request, keyed by its repo-relative path."""
+    try:
+        p = Path(file_path)
+        if p.is_dir():
+            return None
+        rel = os.path.relpath(str(p), repo).replace(os.sep, "/")
+        if rel.startswith(".."):
+            return None  # outside the repo — not ours to index
+        if p.stat().st_size > MAX_REINDEX_BYTES:
+            return None
+        return {"group_id": gid, "rel_path": rel,
+                "content": p.read_text(errors="replace")}
+    except OSError:
+        return None
+
+
 def ingest_allowed(repo_path: str) -> tuple[bool, str]:
     """
     Guard bulk ingest against unbounded / non-project trees.
@@ -150,7 +238,8 @@ def clear_session_log(repo_path: str) -> None:
 
 def mcp_get(path: str, timeout: float = 5.0) -> dict | None:
     try:
-        r = httpx.get(f"{MEM_URL}{path}", timeout=timeout, verify=MEM_VERIFY)
+        r = httpx.get(f"{MEM_URL}{path}", timeout=timeout, verify=MEM_VERIFY,
+                      headers=mem_headers())
         r.raise_for_status()
         return r.json()
     except Exception:
@@ -159,7 +248,8 @@ def mcp_get(path: str, timeout: float = 5.0) -> dict | None:
 
 def mcp_post(path: str, body: dict, timeout: float = 10.0) -> dict | None:
     try:
-        r = httpx.post(f"{MEM_URL}{path}", json=body, timeout=timeout, verify=MEM_VERIFY)
+        r = httpx.post(f"{MEM_URL}{path}", json=body, timeout=timeout, verify=MEM_VERIFY,
+                       headers=mem_headers())
         r.raise_for_status()
         return r.json()
     except Exception:

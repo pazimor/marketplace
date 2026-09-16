@@ -15,7 +15,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _lib import cwd_from_hook, group_id, is_internal_session, mcp_get, mcp_post, read_stdin_json
+from _lib import (
+    cwd_from_hook, group_id, is_internal_session, mcp_get, mcp_post, mem_is_remote,
+    read_stdin_json,
+)
 
 # No-op for the headless distiller subprocesses' own SubagentStop (see _distill.py).
 if is_internal_session():
@@ -51,6 +54,11 @@ def main() -> None:
     payload = read_stdin_json()
     repo    = cwd_from_hook(payload)
     gid     = group_id(repo)
+
+    # Code-RAG reconcile only — pointless against a remote server, which cannot
+    # read this machine's working tree.
+    if mem_is_remote():
+        sys.exit(0)
 
     if mcp_get("/health") is None:
         sys.exit(0)

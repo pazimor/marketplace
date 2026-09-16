@@ -21,9 +21,36 @@ import sys
 import time
 from pathlib import Path
 
-MEM_HOST = os.getenv("MEM_HOST", "127.0.0.1")
+# This hook stays standalone (no _lib import): _lib imports httpx at module
+# level, and bootstrap must still print the static reminder when httpx is
+# missing. Hence the small duplication of the host/auth/TLS policy below —
+# keep it in sync with _lib.
+_MARKET_SETTINGS = Path.home() / ".config" / "market" / "settings.json"
+
+
+def _settings() -> dict:
+    try:
+        return json.loads(_MARKET_SETTINGS.read_text())
+    except Exception:
+        return {}
+
+
+MEM_HOST = os.getenv("MEM_HOST") or str(_settings().get("host") or "") or "127.0.0.1"
 MEM_PORT = os.getenv("MEM_PORT", "7333")
 MEM_URL = f"https://{MEM_HOST}:{MEM_PORT}"
+
+
+def _mem_verify():
+    if MEM_HOST in ("127.0.0.1", "localhost", "::1"):
+        return False
+    ca = os.getenv("MEM_CA_BUNDLE") or str(Path.home() / ".config" / "market" / "ca.pem")
+    return ca if Path(ca).exists() else True
+
+
+def _mem_headers() -> dict:
+    tok = os.getenv("MEM_TOKEN") or str(_settings().get("token") or "")
+    return {"Authorization": f"Bearer {tok}"} if tok else {}
+
 
 # No-op inside the headless haiku subprocess spawned by the memory plugin.
 if os.getenv("MEM_HOOK_INTERNAL") == "1":
@@ -62,7 +89,8 @@ def memory_plugin_installed() -> bool:
 def _try_fetch(gid: str) -> dict | None:
     try:
         import httpx  # optional — degrade gracefully if missing
-        r = httpx.get(f"{MEM_URL}/bootstrap/{gid}", timeout=8.0, verify=False)
+        r = httpx.get(f"{MEM_URL}/bootstrap/{gid}", timeout=8.0,
+                      verify=_mem_verify(), headers=_mem_headers())
         r.raise_for_status()
         data = r.json()
         return None if data.get("error") else data

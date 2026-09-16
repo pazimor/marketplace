@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib import (
     append_session_log, cwd_from_hook, group_id, is_internal_session,
-    mcp_get, mcp_post, read_stdin_json,
+    mcp_get, mcp_post, mem_is_remote, read_stdin_json, reindex_payload,
 )
 
 # No-op for the headless distiller subprocesses' own PostToolUse (see _distill.py).
@@ -45,9 +45,18 @@ def main() -> None:
                 append_session_log(repo, {"tool": tool_name, "path": fp, "ts": now_ts})
         sys.exit(0)
 
+    # A remote server can't open this file — send the content instead, keyed by
+    # the repo-relative path so it merges with what the server's mirror indexed.
+    remote = mem_is_remote()
+
     for fp in paths:
         if fp:
-            mcp_post("/reindex", {"group_id": gid, "file_path": fp})
+            if remote:
+                body = reindex_payload(gid, repo, fp)
+                if body:
+                    mcp_post("/reindex", body)
+            else:
+                mcp_post("/reindex", {"group_id": gid, "file_path": fp})
             append_session_log(repo, {"tool": tool_name, "path": fp, "ts": now_ts})
 
     sys.exit(0)

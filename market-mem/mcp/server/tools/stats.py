@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 from ..db import get_graph
+from ..paths import resolve
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +29,15 @@ def _tokens(chars: int) -> int:
     return max(0, chars) // _CHARS_PER_TOKEN
 
 
-def _file_tokens(path: str) -> int:
+def _file_tokens(path: str, group_id: str | None = None) -> int:
+    """Token cost of reading the whole file, the baseline code RAG saves against.
+
+    Stored paths are repo-relative, so they need resolving before stat()."""
     try:
-        return _tokens(Path(path).stat().st_size)
+        target = resolve(group_id, path) if group_id else path
+        if not target:
+            return 0
+        return _tokens(Path(target).stat().st_size)
     except OSError:
         return 0
 
@@ -57,7 +64,7 @@ def record_search(group_id: str, results: list[dict]) -> None:
     try:
         if not results:
             return
-        baseline = sum(_file_tokens(p) for p in {r.get("path") for r in results} if p)
+        baseline = sum(_file_tokens(p, group_id) for p in {r.get("path") for r in results} if p)
         actual = _tokens(len(json.dumps(results, default=str)))
         _bump(group_id, "stats_search_calls", baseline, actual)
     except Exception as exc:

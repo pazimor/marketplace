@@ -1,6 +1,6 @@
 ---
 name: roadmap-tracker
-description: Tenir la roadmap du projet dans un fichier markdown de la mémoire native (specs canon, milestones avec DoD, tâches à IDs stables, claims) — sans serveur MCP. Utiliser dès que l'utilisateur parle de roadmap, backlog, milestone, spec, tâche ou avancement — ajouter/modifier une entrée, prendre ou continuer une tâche, marquer terminé, demander où on en est — même si le mot « roadmap » n'est pas prononcé explicitement.
+description: Tenir la roadmap du projet dans un fichier markdown de la mémoire native (specs canon, milestones avec DoD, tâches à IDs stables, claims). Utiliser dès que l'utilisateur parle de roadmap, backlog, milestone, spec, tâche ou avancement — ajouter/modifier une entrée, prendre ou continuer une tâche, marquer terminé, demander où on en est — même si le mot « roadmap » n'est pas prononcé explicitement.
 ---
 
 # Roadmap tracker — la roadmap comme fichier mémoire

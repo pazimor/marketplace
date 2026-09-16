@@ -5,7 +5,7 @@
 
   **A Claude Code plugin marketplace: keep the implicit written down — roadmap, canon, and orchestration, as plain markdown files in your repo.**
 
-  [![Plugins](https://img.shields.io/badge/plugins-roadmap%20%7C%20orchestration-informational)](#installation)
+  [![Plugin](https://img.shields.io/badge/plugin-roadmap-informational)](#installation)
   [![Runtime](https://img.shields.io/badge/runtime-none-brightgreen)](#why)
   [![Sync](https://img.shields.io/badge/sync-git-F05032?logo=git&logoColor=white)](#why)
 
@@ -23,7 +23,7 @@ The file is the format. A server would only ever be a transport — never the ot
 
 ## The three pillars
 
-Two plugins, three skills.
+One plugin (`roadmap`), two skills and one agent.
 
 ### `roadmap-tracker` — the plan as a file
 
@@ -49,7 +49,7 @@ Every entry is one line and carries its source:
 
 Nothing is deleted: an entry that goes stale is struck through with its date and reason and stays in place. And it gets filled by a **capture ritual** run at every task closure — "what implicit thing did we work out during this pass?" — so the writing-down isn't left to good intentions.
 
-### `orchestrateur` — Fable orchestrates, Opus codes
+### `orchestrateur` (agent) — Fable orchestrates, Opus / Sonnet / Haiku code
 
 A workflow, made explicit: the model carrying the session **never writes code**. It reframes the request, asks the open questions up front, scopes the work into tasks that each carry an objective, a file perimeter, an executable success criterion and an explicit out-of-scope list — then delegates each one to an Opus agent.
 
@@ -61,8 +61,7 @@ Requires Claude Code. Nothing else.
 
 ```
 /plugin marketplace add pazimor/marketplace
-/plugin install roadmap
-/plugin install orchestration
+/plugin install roadmap@marketplace
 ```
 
 Then, in your project, ask the agent to initialise the roadmap and the canon — it will create `.claude/roadmap.md` and `.claude/canon/*.md` with empty, honest files (it never back-fills invented history). Commit them: that's the sync mechanism.
@@ -75,8 +74,9 @@ The skills trigger on their own — talk about a milestone, a task, a convention
 marketplace/
 ├── .claude-plugin/marketplace.json
 ├── plugins/
-│   ├── roadmap/skills/         # roadmap-tracker, canon-tracker
-│   └── orchestration/skills/   # orchestrateur
+│   └── roadmap/
+│       ├── skills/             # roadmap-tracker, canon-tracker
+│       └── agents/             # orchestrateur (model: fable)
 └── .claude/roadmap.md          # this project's own roadmap, dogfooded
 ```
 

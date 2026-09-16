@@ -42,7 +42,7 @@ def test_snippet_returns_first_lines(tmp_path):
     f = tmp_path / "mod.py"
     f.write_text("\n".join(f"line{i}" for i in range(1, 21)))
     cache: dict = {}
-    snip = _snippet(str(f), 3, 20, cache)
+    snip = _snippet(str(f), 3, 20, cache, "it_unused")
     assert snip is not None
     lines = snip.splitlines()
     assert lines[0] == "line3"
@@ -51,7 +51,7 @@ def test_snippet_returns_first_lines(tmp_path):
 
 def test_snippet_missing_file_returns_none():
     cache: dict = {}
-    assert _snippet("/does/not/exist.py", 1, 5, cache) is None
+    assert _snippet("/does/not/exist.py", 1, 5, cache, "it_unused") is None
     # negative cache entry — second call must not retry the read
     assert cache["/does/not/exist.py"] is None
 
@@ -59,7 +59,7 @@ def test_snippet_missing_file_returns_none():
 def test_snippet_stale_range_returns_none(tmp_path):
     f = tmp_path / "short.py"
     f.write_text("only\ntwo\n")
-    assert _snippet(str(f), 10, 20, {}) is None
+    assert _snippet(str(f), 10, 20, {}, "it_unused") is None
 
 
 # ---------------------------------------------------------------------------

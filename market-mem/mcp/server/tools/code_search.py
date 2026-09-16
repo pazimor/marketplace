@@ -19,6 +19,7 @@ from pathlib import Path
 from ..config import config
 from ..db import get_graph
 from ..embedder import embed
+from ..paths import indexed_commit, resolve
 
 SNIPPET_LINES = 8
 
@@ -48,14 +49,19 @@ def _ft_query(query: str) -> str:
 
 
 def _snippet(path: str, start_line: int, end_line: int,
-             cache: dict[str, list[str] | None]) -> str | None:
+             cache: dict[str, list[str] | None], group_id: str) -> str | None:
     """First SNIPPET_LINES of the chunk, sliced from the source file.
+
+    *path* is the stored repo-relative path; it is resolved against the roots
+    this server can actually read (working tree, then git mirror).
 
     Best-effort: returns None when the file is unreadable or has shifted
     (stale index) — never raises."""
     try:
         if path not in cache:
-            cache[path] = Path(path).read_text(errors="replace").splitlines()
+            abs_path = resolve(group_id, path)
+            cache[path] = (Path(abs_path).read_text(errors="replace").splitlines()
+                           if abs_path else None)
         lines = cache[path]
         if lines is None:
             return None
@@ -144,10 +150,17 @@ def code_search(query: str, group_id: str, k: int = 10) -> dict:
         if nid not in meta:
             continue
         hit = meta[nid] | {"rank_score": round(sc, 5)}
-        hit["snippet"] = _snippet(hit["path"], hit["start_line"], hit["end_line"], file_cache)
+        hit["snippet"] = _snippet(hit["path"], hit["start_line"], hit["end_line"],
+                                  file_cache, group_id)
         out.append(hit)
 
     from .stats import record_search
     record_search(group_id, out)
 
-    return {"results": out, "note": NOTE}
+    # Callers must know how fresh the index is: a mirror-indexed project
+    # reflects the last pushed commit, not anyone's working tree.
+    commit = indexed_commit(group_id)
+    out_doc = {"results": out, "note": NOTE}
+    if commit:
+        out_doc["indexed_commit"] = commit
+    return out_doc

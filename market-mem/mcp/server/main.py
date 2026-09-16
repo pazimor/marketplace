@@ -15,16 +15,19 @@ POST /mcp/messages/    MCP message pairing (SSE transport)
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel
 
-from .config import config
-from .ingestion import ingest_repo, reindex_file
+from .config import allowed_hosts, bind_is_loopback, config
+from .ingestion import ingest_mirror, ingest_repo, reindex_content, reindex_file
 from .tools.code_fetch import code_fetch as _code_fetch
 from .tools.code_search import code_search as _code_search
 from .tools.memory_search import memory_query as _memory_query
@@ -66,7 +69,13 @@ _ingest_status: dict[str, dict] = {}
 # FastMCP — tool definitions
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP("memory")
+mcp = FastMCP(
+    "memory",
+    # DNS-rebinding protection: the SSE transport rejects Host headers it
+    # doesn't know. Loopback works out of the box; a LAN-exposed server has to
+    # declare the address remote clients dial (MEM_ALLOWED_HOSTS).
+    transport_security=TransportSecuritySettings(allowed_hosts=allowed_hosts()),
+)
 
 
 def _known_graphs() -> list[dict]:
@@ -386,11 +395,55 @@ async def _warm_models_background() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+    _assert_auth_configured()
     asyncio.create_task(_warm_models_background())
     yield
 
 
 app = FastAPI(title="memory-mcp", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# Auth — shared bearer token
+# ---------------------------------------------------------------------------
+#
+# Every route except the liveness probe requires `Authorization: Bearer <token>`
+# when MEM_TOKEN is set.  The token is never accepted from a query string: URLs
+# land in proxy logs and shell history.
+#
+# When the port is published off-loopback (MEM_HOST != 127.0.0.1), a token is
+# mandatory — the server refuses to start without one rather than silently
+# exposing memory writes and code_fetch to the whole network.
+
+_PUBLIC_PATHS = {"/health"}
+
+
+def _assert_auth_configured() -> None:
+    if config.MEM_TOKEN:
+        log.info("auth: bearer token required (bind=%s)", config.MEM_BIND_ADDR)
+        return
+    if bind_is_loopback():
+        log.warning("auth: no MEM_TOKEN set — allowed because the port is loopback-only")
+        return
+    raise RuntimeError(
+        f"refusing to start: the MCP port is published on {config.MEM_BIND_ADDR!r} "
+        "but MEM_TOKEN is empty. Set MEM_TOKEN in market-mem/.env "
+        "(e.g. `openssl rand -hex 32`) or set MEM_HOST=127.0.0.1."
+    )
+
+
+def _bearer(request: Request) -> str:
+    header = request.headers.get("authorization", "")
+    scheme, _, value = header.partition(" ")
+    return value.strip() if scheme.lower() == "bearer" else ""
+
+
+@app.middleware("http")
+async def _require_token(request: Request, call_next):
+    if config.MEM_TOKEN and request.url.path not in _PUBLIC_PATHS:
+        if not hmac.compare_digest(_bearer(request), config.MEM_TOKEN):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
 
 
 @app.get("/health")
@@ -400,12 +453,27 @@ def health():
 
 class IngestRequest(BaseModel):
     group_id: str
-    repo_path: str
+    # Local path on THIS machine. Omit it and pass git_url instead when the
+    # caller's files live on another machine (the server then indexes its own
+    # clone — see ingestion.ingest_mirror).
+    repo_path: str | None = None
+    git_url: str | None = None
+    ref: str = ""
+
+
+# A single source file worth indexing is far below this; the cap just stops a
+# client from streaming something absurd into an embedding pass.
+MAX_REINDEX_BYTES = 1_000_000
 
 
 class ReindexRequest(BaseModel):
     group_id: str
-    file_path: str
+    # Path on THIS machine…
+    file_path: str | None = None
+    # …or the repo-relative path plus the content, for a client the server
+    # cannot read.
+    rel_path: str | None = None
+    content: str | None = None
 
 
 class BuildGraphRequest(BaseModel):
@@ -446,29 +514,61 @@ def graph_status(group_id: str):
 
 @app.post("/ingest")
 async def trigger_ingest(req: IngestRequest):
-    """Non-blocking: launches ingest as a background task."""
+    """Non-blocking: launches ingest as a background task.
+
+    Two modes: `repo_path` walks a tree on this machine; `git_url` makes the
+    server clone the repo itself and index that (for clients whose filesystem
+    it cannot reach).
+    """
     gid = req.group_id
+    if not req.repo_path and not req.git_url:
+        return {"status": "error", "group_id": gid,
+                "error": "provide repo_path (local tree) or git_url (server-side mirror)"}
     if _ingest_status.get(gid, {}).get("status") == "running":
         return {"status": "already_running", "group_id": gid}
 
-    _ingest_status[gid] = {"status": "running", "group_id": gid}
+    mode = "mirror" if req.git_url else "local"
+    _ingest_status[gid] = {"status": "running", "group_id": gid, "mode": mode}
 
     async def _run() -> None:
         loop = asyncio.get_running_loop()
         try:
-            result = await loop.run_in_executor(None, ingest_repo, gid, req.repo_path)
-            _ingest_status[gid] = {"status": "done", "group_id": gid, **result}
+            if req.git_url:
+                result = await loop.run_in_executor(
+                    None, ingest_mirror, gid, req.git_url, req.ref)
+            else:
+                result = await loop.run_in_executor(None, ingest_repo, gid, req.repo_path)
+            _ingest_status[gid] = {"status": "done", "group_id": gid, "mode": mode, **result}
         except Exception as exc:
             log.exception("ingest failed for %s", gid)
-            _ingest_status[gid] = {"status": "error", "group_id": gid, "error": str(exc)}
+            _ingest_status[gid] = {"status": "error", "group_id": gid, "mode": mode,
+                                   "error": str(exc)}
 
     asyncio.create_task(_run())
-    return {"status": "started", "group_id": gid}
+    return {"status": "started", "group_id": gid, "mode": mode}
 
 
 @app.post("/reindex")
 async def trigger_reindex(req: ReindexRequest):
+    """Reindex one file.
+
+    `file_path` reads it from this machine. A client the server cannot read
+    sends `rel_path` + `content` instead, so its unpushed edits still reach the
+    graph (the call graph waits for the next mirror ingest).
+    """
     loop = asyncio.get_running_loop()
+    if req.content is not None:
+        if not req.rel_path:
+            return {"status": "error", "error": "content requires rel_path"}
+        if len(req.content) > MAX_REINDEX_BYTES:
+            return {"status": "skipped", "reason": "content too large",
+                    "limit": MAX_REINDEX_BYTES}
+        result = await loop.run_in_executor(
+            None, reindex_content, req.group_id, req.rel_path, req.content)
+        return {"status": "ok", **result}
+
+    if not req.file_path:
+        return {"status": "error", "error": "provide file_path, or rel_path + content"}
     result = await loop.run_in_executor(None, reindex_file, req.group_id, req.file_path)
     return {"status": "ok", **result}
 

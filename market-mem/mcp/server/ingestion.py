@@ -257,6 +257,9 @@ def _content_hash(text: str) -> str:
 
 
 def _chunk_id(path: str, symbol: str) -> str:
+    """Stable node id. *path* MUST be repo-relative: a chunk indexed from two
+    machines (or from a server-side mirror) has to land on the same node, and
+    absolute paths differ per machine."""
     return hashlib.sha256(f"{path}::{symbol}".encode()).hexdigest()[:32]
 
 
@@ -405,13 +408,21 @@ def _rel_path(file_path: str, repo_path: str) -> str:
 # FalkorDB upsert
 # ---------------------------------------------------------------------------
 
-def _upsert_chunk(group_id: str, chunk: Chunk, rel_path: str | None = None) -> bool:
+def _upsert_chunk(group_id: str, chunk: Chunk, rel_path: str | None = None,
+                  run_id: int | None = None) -> bool:
     """
     Insert or update a CodeChunk.  Returns True if a re-embed was performed.
     Hash-gated: skips embed if content_hash unchanged.
+
+    *run_id* stamps ``seen_at`` so a full scan can sweep whatever it did not
+    re-derive (see _sweep_stale_chunks). It must be set on BOTH paths — a
+    hash-gated skip means "still here", not "gone".
     """
     g = get_graph(group_id)
-    cid = _chunk_id(chunk.path, chunk.symbol)
+    # Identity and the stored path are repo-relative (see _chunk_id). The
+    # absolute chunk.path is only a fallback for callers that have no repo root.
+    stored_path = rel_path or chunk.path
+    cid = _chunk_id(stored_path, chunk.symbol)
     chash = _content_hash(chunk.content)
 
     result = g.query(
@@ -429,13 +440,15 @@ def _upsert_chunk(group_id: str, chunk: Chunk, rel_path: str | None = None) -> b
         if rel_path is not None:
             g.query(
                 "MATCH (c:CodeChunk {id: $id}) "
-                "SET c.valid = true, c.rel_path = $rel, c.term_name = $term",
-                {"id": cid, "rel": rel_path, "term": term_name},
+                "SET c.valid = true, c.rel_path = $rel, c.term_name = $term, "
+                "    c.seen_at = COALESCE($run, c.seen_at)",
+                {"id": cid, "rel": rel_path, "term": term_name, "run": run_id},
             )
         else:
             g.query(
-                "MATCH (c:CodeChunk {id: $id}) SET c.valid = true, c.term_name = $term",
-                {"id": cid, "term": term_name},
+                "MATCH (c:CodeChunk {id: $id}) SET c.valid = true, c.term_name = $term, "
+                "    c.seen_at = COALESCE($run, c.seen_at)",
+                {"id": cid, "term": term_name, "run": run_id},
             )
         return False
 
@@ -465,12 +478,13 @@ def _upsert_chunk(group_id: str, chunk: Chunk, rel_path: str | None = None) -> b
             c.updated_at    = $now,
             c.indexed_at    = $now,
             c.valid         = true,
+            c.seen_at       = COALESCE($run, c.seen_at),
             c.created_at    = COALESCE(c.created_at, $now)
         """,
         {
             "id": cid,
             "gid": group_id,
-            "path": chunk.path,
+            "path": stored_path,
             "symbol": chunk.symbol,
             "term": term_name,
             "kind": chunk.kind,
@@ -481,6 +495,7 @@ def _upsert_chunk(group_id: str, chunk: Chunk, rel_path: str | None = None) -> b
             "sb": chunk.start_byte,
             "eb": chunk.end_byte,
             "rel": rel_path,
+            "run": run_id,
             "chash": chash,
             "emb": vec,
             "model": config.CODE_EMBED_MODEL,
@@ -496,6 +511,81 @@ def _upsert_chunk(group_id: str, chunk: Chunk, rel_path: str | None = None) -> b
 # Public API
 # ---------------------------------------------------------------------------
 
+def ingest_mirror(group_id: str, git_url: str, ref: str = "") -> dict:
+    """Bulk ingest from the server's own clone of the repo.
+
+    For clients whose filesystem this server cannot see. The index then tracks
+    the last pushed commit rather than anyone's working tree, which is recorded
+    on the Project node so reads can report it.
+    """
+    from . import mirror
+
+    path, commit = mirror.sync(group_id, git_url, ref)
+    stats = ingest_repo(group_id, path)
+
+    g = get_graph(group_id)
+    g.query(
+        "MATCH (p:Project {group_id: $gid}) "
+        "SET p.mirror_path = $path, p.mirror_commit = $commit, p.mirror_url = $url",
+        {"gid": group_id, "path": path, "commit": commit, "url": git_url},
+    )
+    # ingest_repo just set repo_path to the mirror; that is correct (it IS the
+    # tree we indexed), but the resolver caches roots — refresh after the write.
+    from .paths import invalidate as _invalidate_paths
+    _invalidate_paths(group_id)
+
+    return {**stats, "mirror_commit": commit, "mirror_path": path}
+
+
+def _sweep_stale_chunks(group_id: str, run_id: int, seen: int) -> tuple[int, int]:
+    """Mark-and-sweep for chunks, the counterpart of build_graph's edge purge.
+
+    A full scan stamps every chunk it re-derived with ``seen_at = run_id``.
+    Whatever it did not touch no longer exists in the tree — a deleted file, a
+    renamed symbol — and is invalidated so search stops returning it.
+
+    Chunks stored under an ABSOLUTE path are additionally deleted: they predate
+    the repo-relative keying and can never be re-derived, so leaving them
+    invalid forever would just grow the graph.
+
+    Returns (invalidated, deleted). A scan that produced nothing sweeps nothing:
+    an empty result means the walk failed, not that the repo is empty.
+    """
+    if seen == 0:
+        log.warning("sweep skipped for %s — the scan produced no chunk", group_id)
+        return 0, 0
+
+    g = get_graph(group_id)
+    now = int(time.time() * 1000)
+
+    res = g.query(
+        """
+        MATCH (c:CodeChunk {group_id: $gid, valid: true})
+        WHERE c.seen_at IS NULL OR c.seen_at < $run
+        SET c.valid = false, c.updated_at = $now
+        RETURN count(c)
+        """,
+        {"gid": group_id, "run": run_id, "now": now},
+    )
+    invalidated = res.result_set[0][0] if res.result_set else 0
+
+    res = g.query(
+        """
+        MATCH (c:CodeChunk {group_id: $gid})
+        WHERE (c.seen_at IS NULL OR c.seen_at < $run) AND c.path STARTS WITH '/'
+        DETACH DELETE c
+        RETURN count(c)
+        """,
+        {"gid": group_id, "run": run_id},
+    )
+    deleted = res.result_set[0][0] if res.result_set else 0
+
+    if invalidated or deleted:
+        log.info("chunk sweep — invalidated=%d deleted_pre_migration=%d",
+                 invalidated, deleted)
+    return invalidated, deleted
+
+
 def ingest_repo(group_id: str, repo_path: str) -> dict:
     """
     Full bulk ingest for a project.  Idempotent and hash-gated.
@@ -504,6 +594,7 @@ def ingest_repo(group_id: str, repo_path: str) -> dict:
     ensure_schema(group_id)
     total = embedded = skipped = errors = 0
     counters: dict[str, int] = {}
+    run_id = int(time.time() * 1000)
 
     for file_path, ext, code in iter_source_files(repo_path, counters):
         try:
@@ -512,7 +603,7 @@ def ingest_repo(group_id: str, repo_path: str) -> dict:
             for chunk in chunks:
                 total += 1
                 try:
-                    if _upsert_chunk(group_id, chunk, rel_path=rel):
+                    if _upsert_chunk(group_id, chunk, rel_path=rel, run_id=run_id):
                         embedded += 1
                     else:
                         skipped += 1
@@ -523,6 +614,8 @@ def ingest_repo(group_id: str, repo_path: str) -> dict:
             log.warning("file read/parse failed %s — %s", file_path, e)
             errors += 1
 
+    swept, dropped = _sweep_stale_chunks(group_id, run_id, total)
+
     # Mark last full scan and store repo_path for incremental graph updates
     g = get_graph(group_id)
     now = int(time.time() * 1000)
@@ -530,6 +623,9 @@ def ingest_repo(group_id: str, repo_path: str) -> dict:
         "MATCH (p:Project {group_id: $gid}) SET p.last_full_scan_at = $now, p.repo_path = $repo",
         {"gid": group_id, "now": now, "repo": repo_path},
     )
+    # Roots just changed — drop the resolver's cache so reads see them.
+    from .paths import invalidate as _invalidate_paths
+    _invalidate_paths(group_id)
 
     log.info(
         "ingest done — total=%d embedded=%d skipped=%d errors=%d "
@@ -550,10 +646,51 @@ def ingest_repo(group_id: str, repo_path: str) -> dict:
         graph_stats = {}
 
     return {"total": total, "embedded": embedded, "skipped": skipped, "errors": errors,
+            "invalidated": swept, "deleted_pre_migration": dropped,
             "skipped_vendor": counters.get("skipped_vendor", 0),
             "skipped_minified": counters.get("skipped_minified", 0),
             "skipped_generated": counters.get("skipped_generated", 0),
             "graph": graph_stats}
+
+
+def reindex_content(group_id: str, rel_path: str, content: str) -> dict:
+    """Reindex one file from content sent by the client, without touching disk.
+
+    This is how a machine the server cannot read keeps its edits in the graph:
+    the file never lands on the server, only its chunks do. Chunks are keyed by
+    *rel_path*, so they merge with whatever the mirror indexed for the same file.
+
+    The call graph is NOT updated here — import resolution walks the real tree,
+    which this server doesn't have for that file. Edges are re-derived on the
+    next mirror ingest, after the work is pushed.
+    """
+    ensure_schema(group_id)
+    ext = Path(rel_path).suffix.lstrip(".")
+
+    chunks = _extract_chunks(content.encode(), rel_path, ext)
+    embedded = skipped = 0
+    for chunk in chunks:
+        if _upsert_chunk(group_id, chunk, rel_path=rel_path):
+            embedded += 1
+        else:
+            skipped += 1
+
+    # Invalidate symbols this file no longer defines
+    surviving = {_chunk_id(rel_path, c.symbol) for c in chunks}
+    g = get_graph(group_id)
+    now = int(time.time() * 1000)
+    res = g.query(
+        "MATCH (c:CodeChunk {path: $path, valid: true}) RETURN c.id",
+        {"path": rel_path},
+    )
+    for row in res.result_set:
+        if row[0] not in surviving:
+            g.query(
+                "MATCH (c:CodeChunk {id: $id}) SET c.valid = false, c.updated_at = $now",
+                {"id": row[0], "now": now},
+            )
+
+    return {"embedded": embedded, "skipped": skipped, "mode": "content"}
 
 
 def reindex_file(group_id: str, file_path: str) -> dict:
@@ -568,6 +705,18 @@ def reindex_file(group_id: str, file_path: str) -> dict:
     if p.is_dir():
         return {"skipped": True, "reason": "directory"}
     ext = p.suffix.lstrip(".")
+
+    # Repo root (stored on the Project node at ingest) — chunks are keyed by
+    # their repo-relative path, so every lookup below needs it.
+    _g = get_graph(group_id)
+    _res = _g.query(
+        "MATCH (p:Project {group_id: $gid}) RETURN p.repo_path LIMIT 1",
+        {"gid": group_id},
+    )
+    _repo = _res.result_set[0][0] if _res.result_set else None
+    rel = _rel_path(file_path, _repo) if _repo else None
+    key = rel or file_path
+
     try:
         code = p.read_bytes()
     except FileNotFoundError:
@@ -576,18 +725,9 @@ def reindex_file(group_id: str, file_path: str) -> dict:
         now = int(time.time() * 1000)
         g.query(
             "MATCH (c:CodeChunk {path: $path}) SET c.valid = false, c.updated_at = $now",
-            {"path": file_path, "now": now},
+            {"path": key, "now": now},
         )
         return {"deleted": True}
-
-    # Repo root (stored on the Project node at ingest) — needed for rel_path
-    _g = get_graph(group_id)
-    _res = _g.query(
-        "MATCH (p:Project {group_id: $gid}) RETURN p.repo_path LIMIT 1",
-        {"gid": group_id},
-    )
-    _repo = _res.result_set[0][0] if _res.result_set else None
-    rel = _rel_path(file_path, _repo) if _repo else None
 
     chunks = _extract_chunks(code, file_path, ext)
     embedded = skipped = 0
@@ -598,11 +738,11 @@ def reindex_file(group_id: str, file_path: str) -> dict:
             skipped += 1
 
     # Invalidate symbols that no longer exist in this file
-    surviving_ids = {_chunk_id(chunk.path, chunk.symbol) for chunk in chunks}
+    surviving_ids = {_chunk_id(key, chunk.symbol) for chunk in chunks}
     g = get_graph(group_id)
     result = g.query(
         "MATCH (c:CodeChunk {path: $path, valid: true}) RETURN c.id",
-        {"path": file_path},
+        {"path": key},
     )
     now = int(time.time() * 1000)
     for row in result.result_set:

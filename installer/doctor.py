@@ -84,6 +84,24 @@ def run_checks(mcp_host: str = "127.0.0.1", mcp_port: int = 7333) -> list[Check]
     if not c_mcp.ok:
         return checks
 
+    # Auth — /health is public, /mcp-stats is not. A 401 here means the token
+    # the client would send doesn't match the one the server was started with.
+    def _auth():
+        from .cli import _auth_headers, mem_token
+        r = httpx.get(f"https://{mcp_host}:{mcp_port}/mcp-stats", timeout=5,
+                      verify=False, headers=_auth_headers())
+        if r.status_code == 401:
+            return False, ("token rejected — server and client disagree; "
+                           "re-run `market install` and restart the stack")
+        if r.status_code != 200:
+            return False, f"unexpected status {r.status_code}"
+        if not mem_token():
+            loopback = mcp_host in ("127.0.0.1", "localhost", "::1")
+            return loopback, ("no token (loopback-only, ok)" if loopback
+                              else "NO TOKEN and reachable off-host")
+        return True, "bearer token accepted"
+    add("MCP auth", _auth)
+
     # Phase 5B: report available tree-sitter language parsers
     def _lang_coverage():
         supported = []

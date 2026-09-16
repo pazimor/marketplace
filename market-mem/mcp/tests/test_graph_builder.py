@@ -35,8 +35,12 @@ def _all_calls(analysis: gb.FileAnalysis) -> list[str]:
     return out
 
 
-def _add_chunk(g, gid: str, path: str, symbol: str) -> str:
-    """Insert a CodeChunk the way ingestion would (same id scheme)."""
+def _add_chunk(g, gid: str, root, path: str, symbol: str) -> str:
+    """Insert a CodeChunk the way ingestion would (same id scheme).
+
+    Ingestion keys chunks by their repo-relative path, so *root* (the repo
+    root the builder will be pointed at) is needed to derive it."""
+    path = gb._rel(path, str(root))
     cid = gb._chunk_id(path, symbol)
     g.query(
         """
@@ -131,8 +135,8 @@ def test_common_name_no_global_edge(gid, tmp_path):
     caller.write_text(
         "class Caller { void Go() { var x = Regex.Replace(input, pat, rep); } }"
     )
-    _add_chunk(g, gid, str(definer), "regle.RegleSuivi.Replace")
-    src = _add_chunk(g, gid, str(caller), "caller.Caller.Go")
+    _add_chunk(g, gid, tmp_path, str(definer), "regle.RegleSuivi.Replace")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "caller.Caller.Go")
 
     stats = gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {}
@@ -151,8 +155,8 @@ def replace(s):
 def caller():
     return replace("x")
 """)
-    tgt = _add_chunk(g, gid, str(f), "svc.replace")
-    src = _add_chunk(g, gid, str(f), "svc.caller")
+    tgt = _add_chunk(g, gid, tmp_path, str(f), "svc.replace")
+    src = _add_chunk(g, gid, tmp_path, str(f), "svc.caller")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt: "certain"}
@@ -179,9 +183,9 @@ def caller():
 def build_widget():
     return 2
 """)
-    tgt_local = _add_chunk(g, gid, str(a), "a.build_widget")
-    src = _add_chunk(g, gid, str(a), "a.caller")
-    _add_chunk(g, gid, str(b), "b.build_widget")
+    tgt_local = _add_chunk(g, gid, tmp_path, str(a), "a.build_widget")
+    src = _add_chunk(g, gid, tmp_path, str(a), "a.caller")
+    _add_chunk(g, gid, tmp_path, str(b), "b.build_widget")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt_local: "certain"}
@@ -202,9 +206,9 @@ import util
 def go():
     return frobnicate_value(1)
 """)
-    tgt_util = _add_chunk(g, gid, str(util), "util.frobnicate_value")
-    _add_chunk(g, gid, str(other), "other.frobnicate_value")
-    src = _add_chunk(g, gid, str(caller), "caller.go")
+    tgt_util = _add_chunk(g, gid, tmp_path, str(util), "util.frobnicate_value")
+    _add_chunk(g, gid, tmp_path, str(other), "other.frobnicate_value")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "caller.go")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt_util: "certain"}
@@ -217,8 +221,8 @@ def test_unique_global_resolution(gid, tmp_path):
     d.write_text("def compute_checksum(b):\n    return 0\n")
     caller = tmp_path / "main.py"
     caller.write_text("def entry():\n    return compute_checksum(b'')\n")
-    tgt = _add_chunk(g, gid, str(d), "lib.compute_checksum")
-    src = _add_chunk(g, gid, str(caller), "main.entry")
+    tgt = _add_chunk(g, gid, tmp_path, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "main.entry")
 
     stats = gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt: "certain"}
@@ -233,10 +237,10 @@ def test_probable_edges_for_small_ambiguity(gid, tmp_path):
     for i in range(3):
         f = tmp_path / f"impl{i}.py"
         f.write_text("def render_invoice(x):\n    return x\n")
-        targets.append(_add_chunk(g, gid, str(f), f"impl{i}.render_invoice"))
+        targets.append(_add_chunk(g, gid, tmp_path, str(f), f"impl{i}.render_invoice"))
     caller = tmp_path / "caller.py"
     caller.write_text("def go():\n    return render_invoice(1)\n")
-    src = _add_chunk(g, gid, str(caller), "caller.go")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "caller.go")
 
     stats = gb.build_graph(gid, str(tmp_path))
     edges = _edges_from(g, src)
@@ -250,10 +254,10 @@ def test_too_many_candidates_no_edge(gid, tmp_path):
     for i in range(6):
         f = tmp_path / f"impl{i}.py"
         f.write_text("def render_invoice(x):\n    return x\n")
-        _add_chunk(g, gid, str(f), f"impl{i}.render_invoice")
+        _add_chunk(g, gid, tmp_path, str(f), f"impl{i}.render_invoice")
     caller = tmp_path / "caller.py"
     caller.write_text("def go():\n    return render_invoice(1)\n")
-    src = _add_chunk(g, gid, str(caller), "caller.go")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "caller.go")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {}
@@ -267,8 +271,8 @@ def test_csharp_member_call_end_to_end(gid, tmp_path):
     svc.write_text("class Repo { void PersistRecord(int x) { } }")
     caller = tmp_path / "caller.cs"
     caller.write_text("class C { void Go() { repo.PersistRecord(1); LocalHelperFn(); } }")
-    tgt = _add_chunk(g, gid, str(svc), "svc.Repo.PersistRecord")
-    src = _add_chunk(g, gid, str(caller), "caller.C.Go")
+    tgt = _add_chunk(g, gid, tmp_path, str(svc), "svc.Repo.PersistRecord")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "caller.C.Go")
 
     gb.build_graph(gid, str(tmp_path))
     edges = _edges_from(g, src)
@@ -285,8 +289,8 @@ def test_rebuild_file_graph_uses_new_resolution(gid, tmp_path):
     d.write_text("def compute_checksum(b):\n    return 0\n")
     caller = tmp_path / "main.py"
     caller.write_text("def entry():\n    return compute_checksum(b'')\n")
-    tgt = _add_chunk(g, gid, str(d), "lib.compute_checksum")
-    src = _add_chunk(g, gid, str(caller), "main.entry")
+    tgt = _add_chunk(g, gid, tmp_path, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "main.entry")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt: "certain"}
@@ -302,7 +306,7 @@ def test_build_graph_stats_shape(gid, tmp_path):
     stats = gb.build_graph(gid, str(tmp_path))
     assert set(stats) == {
         "files", "imports", "calls_certain", "calls_probable",
-        "calls_purged", "imports_purged", "errors",
+        "calls_purged", "imports_purged", "files_purged", "errors",
     }
     assert stats["files"] == 1
     assert stats["errors"] == 0
@@ -320,8 +324,8 @@ def test_purge_legacy_edge_without_built_at(gid, tmp_path):
     a.write_text("def standalone_fn():\n    pass\n")
     b = tmp_path / "b.py"
     b.write_text("def other_fn():\n    pass\n")
-    ca = _add_chunk(g, gid, str(a), "a.standalone_fn")
-    cb = _add_chunk(g, gid, str(b), "b.other_fn")
+    ca = _add_chunk(g, gid, tmp_path, str(a), "a.standalone_fn")
+    cb = _add_chunk(g, gid, tmp_path, str(b), "b.other_fn")
     # Legacy edge: no built_at, no certainty — not derivable from the code
     g.query(
         "MATCH (s:CodeChunk {id: $src}), (t:CodeChunk {id: $tgt}) "
@@ -342,8 +346,8 @@ def test_rederived_edge_survives_purge(gid, tmp_path):
     d.write_text("def compute_checksum(b):\n    return 0\n")
     caller = tmp_path / "main.py"
     caller.write_text("def entry():\n    return compute_checksum(b'')\n")
-    tgt = _add_chunk(g, gid, str(d), "lib.compute_checksum")
-    src = _add_chunk(g, gid, str(caller), "main.entry")
+    tgt = _add_chunk(g, gid, tmp_path, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "main.entry")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt: "certain"}
@@ -363,8 +367,8 @@ def test_purge_edge_of_removed_source_function(gid, tmp_path):
     d.write_text("def compute_checksum(b):\n    return 0\n")
     caller = tmp_path / "main.py"
     caller.write_text("def entry():\n    return compute_checksum(b'')\n")
-    tgt = _add_chunk(g, gid, str(d), "lib.compute_checksum")
-    src = _add_chunk(g, gid, str(caller), "main.entry")
+    tgt = _add_chunk(g, gid, tmp_path, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "main.entry")
 
     gb.build_graph(gid, str(tmp_path))
     assert _edges_from(g, src) == {tgt: "certain"}
@@ -383,8 +387,8 @@ def test_rebuild_file_graph_stamps_built_at(gid, tmp_path):
     d.write_text("def compute_checksum(b):\n    return 0\n")
     caller = tmp_path / "main.py"
     caller.write_text("def entry():\n    return compute_checksum(b'')\n")
-    _add_chunk(g, gid, str(d), "lib.compute_checksum")
-    src = _add_chunk(g, gid, str(caller), "main.entry")
+    _add_chunk(g, gid, tmp_path, str(d), "lib.compute_checksum")
+    src = _add_chunk(g, gid, tmp_path, str(caller), "main.entry")
     # FileNodes must exist for rebuild's path collection
     gb.build_graph(gid, str(tmp_path))
 

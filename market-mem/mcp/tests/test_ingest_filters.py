@@ -165,6 +165,101 @@ def test_reingest_restores_validity_and_backfills_rel_path(repo: Path, gid: str,
 
 
 # ---------------------------------------------------------------------------
+# Machine-independent identity: the same repo checked out at two different
+# absolute paths must produce the same nodes, not duplicates. This is what
+# lets a second machine (or a server-side git mirror) share one graph.
+# ---------------------------------------------------------------------------
+
+def test_chunk_identity_is_independent_of_checkout_path(
+    repo: Path, tmp_path_factory, gid: str, fake_embed,
+):
+    import shutil
+
+    ingestion.ingest_repo(gid, str(repo))
+    g = get_graph(gid)
+
+    def _snapshot() -> set[tuple[str, str]]:
+        res = g.query(
+            "MATCH (c:CodeChunk {group_id: $gid, valid: true}) RETURN c.id, c.path",
+            {"gid": gid},
+        )
+        return {(r[0], r[1]) for r in res.result_set}
+
+    first = _snapshot()
+    assert first
+    assert all(not p.startswith("/") for _, p in first), "paths must be repo-relative"
+
+    # Same content, different checkout location — as another machine would have it.
+    other = tmp_path_factory.mktemp("elsewhere") / "clone"
+    shutil.copytree(repo, other)
+    stats = ingestion.ingest_repo(gid, str(other))
+
+    assert stats["embedded"] == 0, "same content must stay hash-gated across checkouts"
+    assert _snapshot() == first, "a different checkout path must not fork the nodes"
+
+
+# ---------------------------------------------------------------------------
+# Mark-and-sweep: a full scan owns the whole chunk set
+# ---------------------------------------------------------------------------
+
+def test_sweep_invalidates_chunks_of_deleted_file(repo: Path, gid: str, fake_embed):
+    (repo / "gone.py").write_text("def doomed_fn():\n    return 1\n")
+    ingestion.ingest_repo(gid, str(repo))
+    g = get_graph(gid)
+
+    def _valid_symbols() -> set[str]:
+        res = g.query(
+            "MATCH (c:CodeChunk {group_id: $gid, valid: true}) RETURN c.symbol",
+            {"gid": gid},
+        )
+        return {r[0] for r in res.result_set}
+
+    assert "gone.doomed_fn" in _valid_symbols()
+
+    (repo / "gone.py").unlink()
+    ingestion.ingest_repo(gid, str(repo))
+
+    symbols = _valid_symbols()
+    assert "gone.doomed_fn" not in symbols, "chunk of a deleted file must be swept"
+    assert "app.normal_fn" in symbols, "surviving chunks must stay valid"
+
+
+def test_sweep_deletes_pre_migration_absolute_path_chunks(repo: Path, gid: str, fake_embed):
+    """Chunks keyed by an absolute path predate repo-relative ids and can never
+    be re-derived — a full scan removes them instead of leaving them forever."""
+    g = get_graph(gid)
+    g.query(
+        "CREATE (:CodeChunk {id: 'legacy1', group_id: $gid, path: '/old/abs/app.py', "
+        "symbol: 'app.normal_fn', valid: true})",
+        {"gid": gid},
+    )
+    stats = ingestion.ingest_repo(gid, str(repo))
+
+    assert stats["deleted_pre_migration"] >= 1
+    res = g.query("MATCH (c:CodeChunk {id: 'legacy1'}) RETURN count(c)")
+    assert res.result_set[0][0] == 0
+
+
+def test_sweep_skipped_when_scan_yields_nothing(repo: Path, gid: str, fake_embed):
+    """An empty walk means the scan failed, not that the repo is empty — it must
+    not wipe the index."""
+    ingestion.ingest_repo(gid, str(repo))
+    g = get_graph(gid)
+
+    empty = repo / "empty_tree"
+    empty.mkdir()
+    stats = ingestion.ingest_repo(gid, str(empty))
+
+    assert stats["total"] == 0
+    assert stats["invalidated"] == 0
+    res = g.query(
+        "MATCH (c:CodeChunk {group_id: $gid, valid: true}) RETURN count(c)",
+        {"gid": gid},
+    )
+    assert res.result_set[0][0] > 0, "a failed scan must not invalidate the index"
+
+
+# ---------------------------------------------------------------------------
 # Full-text index migration (symbol,signature → symbol,signature,rel_path)
 # ---------------------------------------------------------------------------
 

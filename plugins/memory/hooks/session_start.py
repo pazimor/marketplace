@@ -18,8 +18,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib import (
-    compose_file, cwd_from_hook, distill_sync_enabled, group_id, ingest_allowed,
-    is_internal_session, mcp_get, mcp_post, read_stdin_json,
+    MEM_HOST, compose_file, current_branch, cwd_from_hook, distill_sync_enabled,
+    git_remote_url, group_id, ingest_allowed, is_internal_session, mcp_get, mcp_post,
+    mem_is_remote, read_stdin_json,
 )
 
 MAX_WAIT_S = 30
@@ -105,9 +106,12 @@ def main() -> None:
 
     ensure_claude_md_block(repo, gid)
 
-    # 1. Start Docker stack (skipped when the compose file can't be located —
-    # the stack may already be running, so still try the health check below)
-    cf = compose_file()
+    # 1. Start Docker stack. Skipped when the server lives on another machine:
+    # there is nothing to boot here, and the stack is somebody else's business.
+    remote = mem_is_remote()
+    cf = None if remote else compose_file()
+    if remote:
+        print(f"[mem] using remote MCP server at {MEM_HOST}", file=sys.stderr)
     if cf is not None:
         env_file = cf.parent / ".env"
         env_args = ["--env-file", str(env_file)] if env_file.exists() else []
@@ -116,7 +120,7 @@ def main() -> None:
             check=False,
             capture_output=True,
         )
-    else:
+    elif not remote:
         print("[mem] warning: docker-compose.yml not found (run `market install`)", file=sys.stderr)
 
     # 2. Wait for health
@@ -135,6 +139,19 @@ def main() -> None:
     ok, why = ingest_allowed(repo)
     if not ok:
         print(f"[mem] skipping bulk ingest — {why}", file=sys.stderr)
+    elif remote:
+        # The server can't see this machine's files. Have it index its own clone
+        # instead: the index then tracks the last PUSHED commit, and every read
+        # carries that commit so nobody mistakes it for the working tree.
+        url = git_remote_url(repo)
+        if not url:
+            print("[mem] no git remote — remote server cannot index this repo",
+                  file=sys.stderr)
+        else:
+            status = mcp_get(f"/status/{gid}")
+            if status and status.get("status") not in ("running", "done"):
+                mcp_post("/ingest", {"group_id": gid, "git_url": url,
+                                     "ref": current_branch(repo)})
     else:
         status = mcp_get(f"/status/{gid}")
         if status and status.get("status") not in ("running", "done"):

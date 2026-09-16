@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -655,15 +656,28 @@ def _resolve_relative_path(
 
 @dataclass
 class FileAnalysis:
+    # Repo-relative, like every path persisted to the graph: node identity has
+    # to match across machines. Import resolution still runs on absolute paths
+    # inside _analyze_file, which is the only place the filesystem is touched.
     path: str
     ext: str
-    imported_paths: list[str] = field(default_factory=list)  # resolved absolute paths
+    imported_paths: list[str] = field(default_factory=list)  # resolved, repo-relative
     chunk_calls: dict[str, list[str]] = field(default_factory=dict)  # chunk_id → callee names
     local_symbols: dict[str, list[str]] = field(default_factory=dict)  # terminal name → chunk_ids in THIS file
 
 
 def _chunk_id(path: str, symbol: str) -> str:
+    """Must match ingestion._chunk_id — *path* is repo-relative."""
     return hashlib.sha256(f"{path}::{symbol}".encode()).hexdigest()[:32]
+
+
+def _rel(path: str, repo_root: str) -> str:
+    """Absolute → repo-relative, forward slashes. Mirrors ingestion._rel_path."""
+    try:
+        rel = os.path.relpath(path, repo_root)
+    except ValueError:
+        return path
+    return rel.replace(os.sep, "/")
 
 
 # Reuse the same function-node types as ingestion.py (same parser, same AST)
@@ -744,26 +758,27 @@ def _symbol_from_node(node: Node, parent_path: list[str], ext: str) -> str | Non
 
 def _analyze_file(path: str, ext: str, code: bytes, repo_root: str, all_paths: set[str]) -> FileAnalysis:
     """Parse one file and return its calls + resolved imports (no DB access)."""
+    rel = _rel(path, repo_root)
     parser = _get_parser(ext)
     if parser is None:
-        return FileAnalysis(path=path, ext=ext)
+        return FileAnalysis(path=rel, ext=ext)
 
     tree = parser.parse(code)
-    analysis = FileAnalysis(path=path, ext=ext)
+    analysis = FileAnalysis(path=rel, ext=ext)
     module = Path(path).stem
 
-    # Imports
+    # Imports — resolved against the filesystem (absolute), stored relative.
     for spec in _extract_imports(tree.root_node, code, ext):
         resolved = _resolve_import(spec, path, ext, repo_root, all_paths)
         if resolved:
-            analysis.imported_paths.append(resolved)
+            analysis.imported_paths.append(_rel(resolved, repo_root))
 
     # CALLS — walk function nodes and collect calls made inside them
     def _walk(node: Node, parent_path: list[str]) -> None:
         if node.type in _FUNCTION_TYPES:
             symbol = _symbol_from_node(node, parent_path, ext)
             if symbol:
-                cid = _chunk_id(path, symbol)
+                cid = _chunk_id(rel, symbol)
                 terminal = symbol.rsplit(".", 1)[-1]
                 analysis.local_symbols.setdefault(terminal, []).append(cid)
                 calls = _extract_calls(node, ext)
@@ -1070,6 +1085,24 @@ def _purge_stale_edges(g, group_id: str, run_id: int) -> tuple[int, int]:
     return calls_purged, imports_purged
 
 
+def _purge_pre_migration_file_nodes(g, group_id: str) -> int:
+    """Drop FileNodes keyed by an absolute path.
+
+    Their id derives from the path, so the repo-relative keying created fresh
+    nodes beside them; the old ones can never be re-derived and would keep
+    surfacing machine-specific paths in imports_of / imported_by.
+    """
+    res = g.query(
+        """
+        MATCH (f:FileNode {group_id: $gid})
+        WHERE f.path STARTS WITH '/'
+        DETACH DELETE f
+        """,
+        {"gid": group_id},
+    )
+    return int(getattr(res, "nodes_deleted", 0) or 0)
+
+
 def _purge_file_edges(g, source_path: str) -> None:
     """Remove all CALLS edges from chunks in *source_path* and IMPORTS from its FileNode.
     Called before re-analyzing a file.
@@ -1228,12 +1261,14 @@ def build_graph(group_id: str, repo_path: str) -> dict:
     # Sweep: the full pass completed (per-file errors included) — remove
     # edges this run did not re-derive.
     calls_purged, imports_purged = _purge_stale_edges(g, group_id, run_id)
+    files_purged = _purge_pre_migration_file_nodes(g, group_id)
 
     log.info(
         "build_graph done — files=%d imports=%d calls_certain=%d "
-        "calls_probable=%d calls_purged=%d imports_purged=%d errors=%d (%.0fs)",
+        "calls_probable=%d calls_purged=%d imports_purged=%d files_purged=%d "
+        "errors=%d (%.0fs)",
         total, imports_created, calls_certain, calls_probable,
-        calls_purged, imports_purged, errors, time.time() - t0,
+        calls_purged, imports_purged, files_purged, errors, time.time() - t0,
     )
     return {
         "files": total,
@@ -1242,6 +1277,7 @@ def build_graph(group_id: str, repo_path: str) -> dict:
         "calls_probable": calls_probable,
         "calls_purged": calls_purged,
         "imports_purged": imports_purged,
+        "files_purged": files_purged,
         "errors": errors,
     }
 
@@ -1259,21 +1295,28 @@ def rebuild_file_graph(group_id: str, file_path: str, repo_path: str) -> dict:
     if ext not in _SUPPORTED_EXTS or _get_parser(ext) is None:
         return {"skipped": True}
 
+    rel = _rel(file_path, repo_path)
+
     try:
         code = Path(file_path).read_bytes()
     except FileNotFoundError:
         # File deleted — just purge its edges
-        _purge_file_edges(g, file_path)
+        _purge_file_edges(g, rel)
         return {"deleted": True}
 
-    _purge_file_edges(g, file_path)
+    _purge_file_edges(g, rel)
 
-    # Collect repo paths for resolution (best-effort: use DB FileNodes)
+    # Collect repo paths for resolution (best-effort: use DB FileNodes).
+    # FileNodes are stored repo-relative; import resolution walks the real
+    # filesystem, so they have to be re-absolutised against the repo root.
     result = g.query(
         "MATCH (f:FileNode {group_id: $gid}) RETURN f.path",
         {"gid": group_id},
     )
-    all_paths = {row[0] for row in result.result_set if row[0]}
+    all_paths = {
+        row[0] if os.path.isabs(row[0]) else str(Path(repo_path) / row[0])
+        for row in result.result_set if row[0]
+    }
     all_paths.add(file_path)
 
     analysis = _analyze_file(file_path, ext, code, repo_path, all_paths)
@@ -1282,10 +1325,10 @@ def rebuild_file_graph(group_id: str, file_path: str, repo_path: str) -> dict:
     # re-derives these edges anyway and re-stamps them with its own run id).
     now = int(time.time() * 1000)
 
-    _upsert_file_nodes(g, group_id, [(file_path, ext)] + [
+    _upsert_file_nodes(g, group_id, [(rel, ext)] + [
         (tp, Path(tp).suffix.lstrip(".")) for tp in analysis.imported_paths
     ])
-    _write_imports(g, [(file_path, tp) for tp in analysis.imported_paths], now)
+    _write_imports(g, [(rel, tp) for tp in analysis.imported_paths], now)
 
     n_certain, n_probable = _resolve_and_write_calls(g, group_id, [analysis], {}, now)
 
