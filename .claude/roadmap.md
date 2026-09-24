@@ -81,10 +81,10 @@ DoD du milestone : le repo ne contient plus ni Docker, ni FalkorDB, ni embedding
 distiller (`git grep -il falkordb` vide) ; l'installation marketplace ne requiert que
 Claude Code ; CLAUDE.md décrit la nouvelle architecture et rien d'autre.
 
-- [ ] `ROADMAP:TASK:9` Retirer market-mem : serveur, docker-compose, ingestion, graph_builder, tests associés _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_
+- [~] `ROADMAP:TASK:9` Retirer market-mem : serveur, docker-compose, ingestion, graph_builder, tests associés _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8; claimed by claude)_ — périmètre CANON:10 : la carcasse d'auth reste pour M4
 - [x] `ROADMAP:TASK:10` Retirer le plugin memory : hooks, prompts distiller, .mcp.json _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_ — fait 2026-09-24 par anticipation sur décision utilisateur (CANON:7)
-- [ ] `ROADMAP:TASK:11` Simplifier l'installeur CLI (ou le retirer si l'installation plugin native suffit) _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10)_
-- [ ] `ROADMAP:TASK:12` Réécrire CLAUDE.md pour la nouvelle architecture + retro des mémoires obsolètes _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10, ROADMAP:TASK:11)_
+- [~] `ROADMAP:TASK:11` Simplifier l'installeur CLI (ou le retirer si l'installation plugin native suffit) _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10; claimed by claude)_ — décision 2026-09-24 : retiré (CANON:10)
+- [~] `ROADMAP:TASK:12` Réécrire CLAUDE.md pour la nouvelle architecture + retro des mémoires obsolètes _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10, ROADMAP:TASK:11; claimed by claude)_
 
 ## M4 — Tier équipe (`ROADMAP:MILESTONE:4`, planned)
 
@@ -101,5 +101,11 @@ fonctionne toujours strictement sans serveur.
 - [ ] `ROADMAP:TASK:15` Résolution client (repo local > serveur, force-fetch) + provenance multi-auteurs [USER:<nom>] _(implements ROADMAP:SPEC:2, ROADMAP:SPEC:4; depends on ROADMAP:TASK:13, ROADMAP:TASK:14)_
 
 ## Backlog (no milestone)
+
+- [~] `ROADMAP:TASK:17` CI GitHub Actions : manifestes, frontmatter agents/skills, grammaire canon + roadmap, smoke test d'installation du plugin _(implements ROADMAP:SPEC:1, ROADMAP:SPEC:2; depends on ROADMAP:TASK:18; claimed by claude)_
+- [~] `ROADMAP:TASK:18` Grammaire canon + roadmap écrite comme spec formelle (docs/) avec validateur exécutable _(implements ROADMAP:SPEC:2; claimed by claude)_
+- [~] `ROADMAP:TASK:19` Orchestrateur générique (CANON:8) + choix de l'effort par tâche déléguée (CANON:11), agents Workflow compris _(implements ROADMAP:SPEC:3; claimed by claude)_
+- [~] `ROADMAP:TASK:20` CHANGELOG.md + versionnage semver des plugins (CANON:9) _(implements ROADMAP:SPEC:1; claimed by claude)_
+- [~] `ROADMAP:TASK:21` Traçabilité de TASK:8 : l'orchestrateur note ce qui a coincé après chaque session réelle _(implements ROADMAP:SPEC:3; claimed by claude)_
 
 - [ ] `ROADMAP:TASK:16` [RÉFLEXION] Recherche full-text dans un gros canon d'entreprise (jamais d'embeddings — décision 2026-09-01) _(implements ROADMAP:SPEC:4)_
