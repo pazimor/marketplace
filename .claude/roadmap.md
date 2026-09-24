@@ -38,8 +38,9 @@
 Règles :
 - Le fichier est le format ; un serveur n'est qu'un transport (jamais l'inverse).
 - Une entrée canon `[USER]` ne se réécrit pas ; le modèle signale les conflits.
-- Rien du legacy (market-mem, plugin memory, installeur Docker) ne se démonte avant que le
-  nouveau workflow soit validé en usage réel (TASK:8).
+- ~~Rien du legacy (market-mem, plugin memory, installeur Docker) ne se démonte avant que le
+  nouveau workflow soit validé en usage réel (TASK:8).~~ — levée 2026-09-24 sur décision
+  utilisateur (CANON:7, CANON:10).
 
 ## M1 — Fondations fichiers (`ROADMAP:MILESTONE:1`, active)
 
@@ -72,7 +73,7 @@ retrouve ces contraintes avant de coder.
 - [x] `ROADMAP:TASK:7` Gate de lecture : canon + roadmap chargés obligatoirement avant toute action de code _(implements ROADMAP:SPEC:2; depends on ROADMAP:TASK:3)_
 - [ ] `ROADMAP:TASK:8` Valider le workflow complet en usage réel sur le projet de jeu et ajuster les skills _(implements ROADMAP:SPEC:3; depends on ROADMAP:TASK:5, ROADMAP:TASK:6, ROADMAP:TASK:7)_
 
-## M3 — Démantèlement du legacy (`ROADMAP:MILESTONE:3`, planned)
+## M3 — Démantèlement du legacy (`ROADMAP:MILESTONE:3`, done)
 
 Retirer l'ancienne architecture une fois — et seulement une fois — le nouveau workflow
 validé (TASK:8). Décision commanditaire 2026-09-01 : FalkorDB disparaît complètement.
@@ -81,10 +82,10 @@ DoD du milestone : le repo ne contient plus ni Docker, ni FalkorDB, ni embedding
 distiller (`git grep -il falkordb` vide) ; l'installation marketplace ne requiert que
 Claude Code ; CLAUDE.md décrit la nouvelle architecture et rien d'autre.
 
-- [~] `ROADMAP:TASK:9` Retirer market-mem : serveur, docker-compose, ingestion, graph_builder, tests associés _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8; claimed by claude)_ — périmètre CANON:10 : la carcasse d'auth reste pour M4
+- [x] `ROADMAP:TASK:9` Retirer market-mem : serveur, docker-compose, ingestion, graph_builder, tests associés _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_ — fait 2026-09-24 : seule la carcasse d'auth reste (CANON:10), tests `cd market-mem/mcp && python -m pytest -q` verts
 - [x] `ROADMAP:TASK:10` Retirer le plugin memory : hooks, prompts distiller, .mcp.json _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_ — fait 2026-09-24 par anticipation sur décision utilisateur (CANON:7)
-- [~] `ROADMAP:TASK:11` Simplifier l'installeur CLI (ou le retirer si l'installation plugin native suffit) _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10; claimed by claude)_ — décision 2026-09-24 : retiré (CANON:10)
-- [~] `ROADMAP:TASK:12` Réécrire CLAUDE.md pour la nouvelle architecture + retro des mémoires obsolètes _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10, ROADMAP:TASK:11; claimed by claude)_
+- [x] `ROADMAP:TASK:11` Simplifier l'installeur CLI (ou le retirer si l'installation plugin native suffit) _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10)_ — fait 2026-09-24 : retiré (CANON:10), l'installation passe par `/plugin install`
+- [x] `ROADMAP:TASK:12` Réécrire CLAUDE.md pour la nouvelle architecture + retro des mémoires obsolètes _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10, ROADMAP:TASK:11)_ — fait 2026-09-24
 
 ## M4 — Tier équipe (`ROADMAP:MILESTONE:4`, planned)
 
@@ -102,10 +103,10 @@ fonctionne toujours strictement sans serveur.
 
 ## Backlog (no milestone)
 
-- [~] `ROADMAP:TASK:17` CI GitHub Actions : manifestes, frontmatter agents/skills, grammaire canon + roadmap, smoke test d'installation du plugin _(implements ROADMAP:SPEC:1, ROADMAP:SPEC:2; depends on ROADMAP:TASK:18; claimed by claude)_
-- [~] `ROADMAP:TASK:18` Grammaire canon + roadmap écrite comme spec formelle (docs/) avec validateur exécutable _(implements ROADMAP:SPEC:2; claimed by claude)_
-- [~] `ROADMAP:TASK:19` Orchestrateur générique (CANON:8) + choix de l'effort par tâche déléguée (CANON:11), agents Workflow compris _(implements ROADMAP:SPEC:3; claimed by claude)_
-- [~] `ROADMAP:TASK:20` CHANGELOG.md + versionnage semver des plugins (CANON:9) _(implements ROADMAP:SPEC:1; claimed by claude)_
-- [~] `ROADMAP:TASK:21` Traçabilité de TASK:8 : l'orchestrateur note ce qui a coincé après chaque session réelle _(implements ROADMAP:SPEC:3; claimed by claude)_
+- [x] `ROADMAP:TASK:17` CI GitHub Actions : manifestes, frontmatter agents/skills, grammaire canon + roadmap, smoke test d'installation du plugin _(implements ROADMAP:SPEC:1, ROADMAP:SPEC:2; depends on ROADMAP:TASK:18)_ — fait 2026-09-24 : `.github/workflows/ci.yml`
+- [x] `ROADMAP:TASK:18` Grammaire canon + roadmap écrite comme spec formelle (docs/) avec validateur exécutable _(implements ROADMAP:SPEC:2)_ — fait 2026-09-24 : `docs/grammar.md`, `scripts/validate.py`
+- [x] `ROADMAP:TASK:19` Orchestrateur générique (CANON:8) + choix de l'effort par tâche déléguée (CANON:11), agents Workflow compris _(implements ROADMAP:SPEC:3)_ — fait 2026-09-24 : agents `executant-*`, plugin 0.3.0
+- [x] `ROADMAP:TASK:20` CHANGELOG.md + versionnage semver des plugins (CANON:9) _(implements ROADMAP:SPEC:1)_ — fait 2026-09-24
+- [x] `ROADMAP:TASK:21` Traçabilité de TASK:8 : l'orchestrateur note ce qui a coincé après chaque session réelle _(implements ROADMAP:SPEC:3)_ — fait 2026-09-24 : seconde question du rituel de capture
 
 - [ ] `ROADMAP:TASK:16` [RÉFLEXION] Recherche full-text dans un gros canon d'entreprise (jamais d'embeddings — décision 2026-09-01) _(implements ROADMAP:SPEC:4)_

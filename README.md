@@ -51,9 +51,11 @@ Nothing is deleted: an entry that goes stale is struck through with its date and
 
 ### `orchestrateur` (agent) — Fable orchestrates, Opus / Sonnet / Haiku code
 
-A workflow, made explicit: the model carrying the session **never writes code**. It reframes the request, asks the open questions up front, scopes the work into tasks that each carry an objective, a file perimeter, an executable success criterion and an explicit out-of-scope list — then delegates each one to an Opus agent.
+A workflow, made explicit: the model carrying the session **never writes code**. It reframes the request, asks the open questions up front, scopes the work into tasks that each carry an objective, a file perimeter, an executable success criterion and an explicit out-of-scope list — then delegates each one, choosing **both the model and the reasoning effort** by the nature of the work.
 
-The rest is verification: a delegated agent's report is a claim, not proof, so the orchestrator runs the success criterion itself and reads the output. Before any delegation it passes a mandatory read gate over the canon and the roadmap; at closure it runs the capture ritual and only then ticks the box.
+Effort can't be passed on a plain subagent call, so the plugin ships five executor agents (`executant-low` … `executant-max`) that differ only by `effort`: picking the executor picks the effort, the model is passed per call. When you explicitly ask for a multi-agent workflow, the orchestrator writes the script with an explicit `model` and `effort` on every step.
+
+The rest is verification: a delegated agent's report is a claim, not proof, so the orchestrator runs the success criterion itself and reads the output. Before any delegation it passes a mandatory read gate over the canon and the roadmap — project specifics (tools, commands, files never to touch) come from there, the agent itself stays generic. At closure it runs the capture ritual — what implicit thing was settled, and what got stuck in the orchestration itself — and only then ticks the box.
 
 ## Installation
 
@@ -76,20 +78,19 @@ marketplace/
 ├── plugins/
 │   └── roadmap/
 │       ├── skills/             # roadmap-tracker, canon-tracker
-│       └── agents/             # orchestrateur (model: fable)
-└── .claude/roadmap.md          # this project's own roadmap, dogfooded
+│       └── agents/             # orchestrateur (model: fable), executant-{low,medium,high,xhigh,max}
+├── docs/grammar.md             # formal grammar of the canon and roadmap files
+├── scripts/validate.py         # stdlib validator — run it on any project using the plugin
+├── market-mem/                 # auth skeleton kept for the M4 team server, no features
+├── CHANGELOG.md
+└── .claude/                    # this project's own roadmap and canon, dogfooded
 ```
 
-## Legacy — being removed
+Check a project's roadmap and canon files: `python3 scripts/validate.py <project-root>`.
 
-This repo used to distribute a heavier `memory` plugin: a Docker stack (FalkorDB + an MCP server), a semantic code index, embeddings, and a transcript distiller. That approach is **abandoned** — ripgrep plus current models make the code index unnecessary, and Claude Code's native memory covers the memory need.
+## Legacy — removed
 
-The `memory` plugin itself (hooks, distiller prompts, `.mcp.json`) has been removed. Two old pieces are still on disk, but no longer in `.claude-plugin/marketplace.json`:
-
-- `market-mem/` — Docker stack, FalkorDB, ingestion, graph builder
-- `installer/` — the `market` CLI (its install path depended on the removed plugin)
-
-They are **deprecated**; their removal is milestone M3. If you have the old stack installed it keeps working for now, but don't build on it. See [`.claude/roadmap.md`](.claude/roadmap.md) for the full plan.
+This repo used to distribute a heavier `memory` plugin: a Docker stack (FalkorDB + an MCP server), a semantic code index, embeddings, a transcript distiller and a `market` installer CLI. That approach is **abandoned** — ripgrep plus current models make the code index unnecessary, and Claude Code's native memory covers the memory need. All of it is gone; only a small FastAPI bearer-token auth skeleton remains in `market-mem/`, as the base of the M4 team server. The old code lives in git history.
 
 ## Roadmap
 
@@ -97,7 +98,7 @@ They are **deprecated**; their removal is milestone M3. If you have the old stac
 |---|---|---|
 | **M1** | File foundations — roadmap plugin, canon skill with provenance, installable with no server at all | 🚧 active |
 | **M2** | Fable → Opus orchestration — capture ritual and read gate, validated in real use | planned |
-| **M3** | Legacy teardown — Docker, FalkorDB, embeddings and distiller removed for good | planned |
+| **M3** | Legacy teardown — Docker, FalkorDB, embeddings, distiller and installer removed for good | ✅ done |
 | **M4** | Team tier — a minimal MCP file server for teams without git: standard bearer-token auth per the MCP spec, versioned markdown store, optimistic concurrency (a push on a stale version is rejected, then re-fetch/merge/re-push). **Like GitHub, not on GitHub** | planned |
 
 The solo tier stays strictly server-free, M4 included.
