@@ -84,13 +84,12 @@ marketplace/
 
 This repo used to distribute a heavier `memory` plugin: a Docker stack (FalkorDB + an MCP server), a semantic code index, embeddings, and a transcript distiller. That approach is **abandoned** — ripgrep plus current models make the code index unnecessary, and Claude Code's native memory covers the memory need.
 
-The old pieces are still on disk and still referenced by `.claude-plugin/marketplace.json`:
+The `memory` plugin itself (hooks, distiller prompts, `.mcp.json`) has been removed. Two old pieces are still on disk, but no longer in `.claude-plugin/marketplace.json`:
 
-- `plugins/memory/` — hooks, distiller prompts, `.mcp.json`
 - `market-mem/` — Docker stack, FalkorDB, ingestion, graph builder
-- `installer/` — the `market` CLI
+- `installer/` — the `market` CLI (its install path depended on the removed plugin)
 
-They are **deprecated, not gone**. Nothing is dismantled before the new workflow is validated in real use (`ROADMAP:TASK:8`); removal is milestone M3. If you have the old stack installed it keeps working for now, but don't build on it. See [`.claude/roadmap.md`](.claude/roadmap.md) for the full plan.
+They are **deprecated**; their removal is milestone M3. If you have the old stack installed it keeps working for now, but don't build on it. See [`.claude/roadmap.md`](.claude/roadmap.md) for the full plan.
 
 ## Roadmap
 

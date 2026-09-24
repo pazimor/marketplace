@@ -82,7 +82,7 @@ distiller (`git grep -il falkordb` vide) ; l'installation marketplace ne requier
 Claude Code ; CLAUDE.md décrit la nouvelle architecture et rien d'autre.
 
 - [ ] `ROADMAP:TASK:9` Retirer market-mem : serveur, docker-compose, ingestion, graph_builder, tests associés _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_
-- [ ] `ROADMAP:TASK:10` Retirer le plugin memory : hooks, prompts distiller, .mcp.json _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_
+- [x] `ROADMAP:TASK:10` Retirer le plugin memory : hooks, prompts distiller, .mcp.json _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:8)_ — fait 2026-09-24 par anticipation sur décision utilisateur (CANON:7)
 - [ ] `ROADMAP:TASK:11` Simplifier l'installeur CLI (ou le retirer si l'installation plugin native suffit) _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10)_
 - [ ] `ROADMAP:TASK:12` Réécrire CLAUDE.md pour la nouvelle architecture + retro des mémoires obsolètes _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:9, ROADMAP:TASK:10, ROADMAP:TASK:11)_
 
