@@ -10,10 +10,7 @@ build/
 venv/
 
 # Runtime state
-.mcp-memory/
 *.log
-
-# Docker volumes are external
 
 # Local TLS certs (mkcert)
 market-mem/certs/
