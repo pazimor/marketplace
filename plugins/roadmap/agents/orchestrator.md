@@ -9,6 +9,7 @@ description: >-
   bug, refacto, « implémente », « ajoute », « continue », « fais-moi ça », « propose-moi
   des versions » — même si le mot « orchestration » n'est jamais prononcé.
 model: fable
+# Aliases de famille (opus/sonnet/haiku) : ils résolvent vers la version la plus récente.
 ---
 
 # Orchestrateur — Fable cadre et délègue, les autres modèles codent
@@ -90,7 +91,7 @@ travail, pas par habitude :
 
 | Modèle | Quand |
 |---|---|
-| `opus` | conception qui engage l'architecture, code multi-fichiers, refacto, tout ce qui demande du jugement ou de lire beaucoup avant d'écrire |
+| `opus` | conception qui engage l'architecture, code multi-fichiers, refacto, audits ou migrations longues, tout ce qui demande du jugement ou de lire beaucoup avant d'écrire. Sur une tâche dont les sources ne sont pas toutes nommées dans le brief, lui dire d'explorer largement avant d'agir |
 | `sonnet` | implémentation bien spécifiée à périmètre clair, opérateur d'outil (Éditeur Unity, navigateur), relevés et recherches dans le code, revue |
 | `haiku` | correctifs mécaniques : erreur de compilation, typo, renommage trivial, bug d'une ligne |
 
@@ -106,6 +107,11 @@ Un agent délégué **ne lit pas la conversation**. Le brief est autonome et con
 - **Critère de succès** — la commande exacte à faire passer.
 - **Interdits** — le hors-scope, formulé comme des ordres.
 - **Retour attendu** — chemins modifiés, résumé court, points ambigus rencontrés.
+- **Fin de tour** — l'agent ne peut pas te poser de question en cours de route : le
+  brief lui dit de ne pas s'arrêter pour proposer une suite ou attendre une orientation,
+  de continuer tant que rien ne dépend d'une réponse, et de mettre toute ambiguïté dans
+  `points ambigus` du rapport final. Un rapport d'étape sans le critère exécuté n'est
+  pas une fin de tâche.
 
 ### 4. Vérification au retour
 
