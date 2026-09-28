@@ -1,7 +1,7 @@
 {
   "name": "roadmap",
-  "version": "0.2.0",
-  "description": "Roadmap + canon fichiers pour Claude Code — specs canon, milestones avec DoD, tâches à IDs stables et claims (.claude/roadmap.md), canon avec provenance [USER]/[MODEL] (.claude/canon/), et l'agent orchestrateur (Fable cadre, Opus/Sonnet/Haiku codent). Sans serveur MCP : portable via git.",
+  "version": "0.3.0",
+  "description": "Roadmap + canon fichiers pour Claude Code — specs canon, milestones avec DoD, tâches à IDs stables et claims (.claude/roadmap.md), canon avec provenance [USER]/[MODEL] (.claude/canon/), l'agent orchestrateur (Fable cadre, Opus/Sonnet/Haiku codent, modèle × effort choisis par tâche) et ses exécutants par niveau d'effort. Sans serveur MCP : portable via git.",
   "author": {
     "name": "eddy-hummel",
     "email": "eddy.hummel@gmail.com"

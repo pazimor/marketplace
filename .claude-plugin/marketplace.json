@@ -5,7 +5,7 @@
     "email": "eddy.hummel@gmail.com"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, for Claude Code",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "plugins": [
     {
       "name": "roadmap",

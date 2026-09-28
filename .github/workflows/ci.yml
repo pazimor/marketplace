@@ -1,0 +1,69 @@
+# Outillage du repo uniquement (CANON:5) : le validateur tourne aussi en local, sans GitHub —
+#   python3 scripts/validate.py . && python3 -m unittest discover -s scripts/tests -v
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifests, frontmatter, canon and roadmap
+        run: python3 scripts/validate.py .
+
+      - name: Validator tests
+        run: python3 -m unittest discover -s scripts/tests -v
+
+  smoke-install:
+    runs-on: ubuntu-latest
+    env:
+      # Aucune authentification nécessaire : validate / marketplace add / install / list
+      # sont des commandes locales. HOME isolé pour partir d'une config Claude Code vierge.
+      HOME: ${{ github.workspace }}/../claude-home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code CLI
+        run: |
+          mkdir -p "$HOME"
+          npm i -g @anthropic-ai/claude-code
+          claude --version
+
+      - name: claude plugin validate
+        run: |
+          if claude plugin validate --help >/dev/null 2>&1; then
+            claude plugin validate .
+            for dir in plugins/*/; do
+              claude plugin validate "$dir"
+            done
+          else
+            echo "::warning::'claude plugin validate' indisponible dans cette version du CLI, étape sautée"
+          fi
+
+      - name: Add marketplace and install the plugin
+        run: |
+          claude plugin marketplace add ./
+          claude plugin install roadmap@marketplace
+
+      - name: Check the plugin is installed and enabled
+        run: |
+          claude plugin list
+          claude plugin list --json | python3 -c '
+          import json, sys
+          plugins = {p["id"]: p for p in json.load(sys.stdin)}
+          p = plugins.get("roadmap@marketplace")
+          assert p is not None, f"roadmap@marketplace absent : {sorted(plugins)}"
+          assert p.get("enabled"), f"roadmap@marketplace installé mais désactivé : {p}"
+          print("roadmap@marketplace", p.get("version"), "installé et activé")
+          '

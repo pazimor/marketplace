@@ -1,46 +1,15 @@
 name: market-mem
 
 services:
-  falkordb:
-    image: falkordb/falkordb:latest
-    expose: ["6379"]
-    ports:
-      - "127.0.0.1:3000:3000"
-    networks: [mem-net]
-    volumes:
-      - falkordb_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
   mcp:
     build:
       context: ./mcp
     ports:
       - "${MEM_HOST:-127.0.0.1}:${MEM_PORT:-7333}:7333"
-    networks: [mem-net]
     volumes:
-      # Bind-mount repos read-only at the same path so code_fetch can read host files.
-      # macOS: set REPOS_ROOT=/Users  Linux: set REPOS_ROOT=/home or /
-      - "${REPOS_ROOT:-/Users}:${REPOS_ROOT:-/Users}:ro"
-      # Persistent model cache — downloaded once, reused across restarts.
-      - embed-models:/data/models
-      # Per-route MCP usage stats (.mcp_memory) — survives restarts.
-      - mcp-memory:/data/.mcp_memory
-      # Server-side git mirrors, one clone per project. Used to index repos
-      # whose working tree lives on another machine.
-      - repo-mirrors:/data/repos
-      # Read-only SSH credentials for cloning private repos over ssh://.
-      # Uncomment and point at a key that has read access to them.
-      # - "${SSH_DIR:-/dev/null}:/root/.ssh:ro"
       # TLS cert + key (mkcert, locally-trusted) — read-only.
       - ./certs:/certs:ro
     environment:
-      FALKORDB_HOST: falkordb
-      FALKORDB_PORT: "6379"
       # Shared bearer token. Mandatory as soon as MEM_HOST is not loopback —
       # the server refuses to start otherwise.
       MEM_TOKEN: "${MEM_TOKEN:-}"
@@ -48,27 +17,11 @@ services:
       # Addresses remote clients dial (comma-separated, no port) — required by
       # the MCP transport's DNS-rebinding check. Loopback is always allowed.
       MEM_ALLOWED_HOSTS: "${MEM_ALLOWED_HOSTS:-}"
-      CODE_EMBED_MODEL: "${CODE_EMBED_MODEL:-microsoft/graphcodebert-base}"
-      MEMORY_EMBED_MODEL: "${MEMORY_EMBED_MODEL:-nomic-ai/nomic-embed-text-v1.5}"
-      MAX_DIM: "${MAX_DIM:-2048}"
       TLS_CERT_FILE: "/certs/server.crt"
       TLS_KEY_FILE: "/certs/server.key"
-    depends_on:
-      falkordb:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -skf https://localhost:7333/health || exit 1"]
+      test: ["CMD-SHELL", "curl -skf https://localhost:7333/health || curl -sf http://localhost:7333/health || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 12
-
-networks:
-  mem-net:
-    driver: bridge
-
-volumes:
-  falkordb_data:
-  embed-models:
-  mcp-memory:
-  repo-mirrors:

@@ -2,14 +2,6 @@ import os
 
 
 class Config:
-    FALKORDB_HOST: str = os.getenv("FALKORDB_HOST", "127.0.0.1")
-    FALKORDB_PORT: int = int(os.getenv("FALKORDB_PORT", "6379"))
-
-    CODE_EMBED_MODEL: str = os.getenv("CODE_EMBED_MODEL", "microsoft/graphcodebert-base")
-    MEMORY_EMBED_MODEL: str = os.getenv("MEMORY_EMBED_MODEL", "nomic-ai/nomic-embed-text-v1.5")
-
-    MAX_DIM: int = int(os.getenv("MAX_DIM", "2048"))
-
     SERVER_PORT: int = int(os.getenv("MEM_PORT", "7333"))
 
     # Shared secret required on every request (Authorization: Bearer <token>).
@@ -25,6 +17,10 @@ class Config:
     # (no port). The MCP SSE transport rejects anything else as a possible DNS
     # rebinding attack, so a LAN-exposed server must list its LAN IP / hostname.
     MEM_ALLOWED_HOSTS: str = os.getenv("MEM_ALLOWED_HOSTS", "")
+
+    # TLS cert + key (mkcert). Both set and present = serve https.
+    TLS_CERT_FILE: str = os.getenv("TLS_CERT_FILE", "")
+    TLS_KEY_FILE: str = os.getenv("TLS_KEY_FILE", "")
 
 
 config = Config()
@@ -48,3 +44,11 @@ def allowed_hosts() -> list[str]:
     for n in names:
         out += [n, f"{n}:*"]
     return out
+
+
+def ssl_kwargs() -> dict[str, str]:
+    """uvicorn TLS arguments; empty (plain http) unless cert + key both exist."""
+    cert, key = config.TLS_CERT_FILE, config.TLS_KEY_FILE
+    if cert and key and os.path.exists(cert) and os.path.exists(key):
+        return {"ssl_certfile": cert, "ssl_keyfile": key}
+    return {}
