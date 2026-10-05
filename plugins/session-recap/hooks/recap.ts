@@ -532,6 +532,44 @@ export function planProgress(plan: Plan): {
   }
 }
 
+export type WorkflowStage = {
+  name: string
+  planned: number // agents prévus (somme des étapes)
+  runs: AgentRun[] // agents déjà lancés dans cette phase, du plus ancien au plus récent
+  placeholders: number // agents prévus pas encore lancés
+  done: number // agents terminés
+  status: PlanStep['status']
+}
+/** Phases d'un workflow (étapes consécutives de même phase) avec leurs agents, lancés ou à venir. */
+export function workflowStages(s: Recap): WorkflowStage[] {
+  const plan = s.plan
+  if (plan === null || !plan.isWorkflow) return []
+  const groups: { name: string; idx: number[] }[] = []
+  plan.steps.forEach((x, i) => {
+    const last = groups[groups.length - 1]
+    if (last !== undefined && last.name === x.stage) last.idx.push(i)
+    else groups.push({ name: x.stage, idx: [i] })
+  })
+  const running = groups.findIndex(g => g.idx.some(i => plan.steps[i]!.status === 'running'))
+  const fallback = running >= 0 ? running : groups.length - 1
+  return groups.map(g => {
+    const steps = g.idx.map(i => plan.steps[i]!)
+    // un agent lancé avant le plan (sans étape) est rattaché à la phase en cours
+    const runs = s.order
+      .map(id => s.runs[id]!)
+      .filter(r => r.id !== MAIN && (r.stepIndex !== undefined ? g.idx.includes(r.stepIndex) : groups.indexOf(g) === fallback))
+    const planned = steps.reduce((n, x) => n + x.agents, 0)
+    return {
+      name: g.name !== '' ? g.name : plan.title,
+      planned,
+      runs,
+      placeholders: Math.max(0, planned - runs.length),
+      done: steps.reduce((n, x) => n + x.finished, 0),
+      status: steps.every(x => x.status === 'done') ? 'done' : steps.some(x => x.status === 'failed') ? 'failed' : steps.some(x => x.status === 'running') ? 'running' : 'todo',
+    }
+  })
+}
+
 export const isPlanLive = (s: Recap): boolean => s.plan !== null && s.plan.endedAt === undefined
 
 /** Dernier outil appelé par un agent (`tool.call` porte l'agentId ; absent = agent principal). */

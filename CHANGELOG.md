@@ -11,6 +11,9 @@ la version de `.claude-plugin/marketplace.json` suit à chaque changement du cat
 
 ## [Unreleased]
 
+### plugin `session-recap` 0.7.0 — marketplace 0.10.0 — Ajouté
+- Affichage d'un vrai workflow (`workflow: true` seulement) : une section par phase, « n/m agents · phase: » puis les cartes des agents de la phase (le premier titre porte aussi spinner, pourcentage et durée) ; les agents prévus mais pas encore lancés apparaissent en emplacements « agent n — à venir ». Un agent lancé avant le plan est rattaché à la phase en cours. Hors workflow, rien ne change (cartes des agents actifs).
+
 ### plugin `roadmap` 0.6.0 — marketplace 0.9.0 — Modifié
 - `scribe` n'est plus le point d'entrée (une session Claude Desktop ne peut pas démarrer avec lui, `CANON:27`). L'agent principal, le `scribe` et l'`orchestrateur` sont trois pairs égaux qui se parlent directement (`SendMessage`, messages courts par IDs et chemins). Le scribe tient canon et roadmap, ne relaie ni ne recopie rien (son contexte ne se remplit plus pour rien) ; l'orchestrateur rend compte à son appelant et envoie ses constats au scribe. Plus de réglage `--agent roadmap:scribe`.
 

@@ -5,7 +5,7 @@
     "email": "eddy.hummel@gmail.com"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a session-recap mod, for Claude Code",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "plugins": [
     {
       "name": "roadmap",

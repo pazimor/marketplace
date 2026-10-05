@@ -2,7 +2,7 @@
 // Usage : node --experimental-strip-types scripts/preview-session-recap.mts
 import { writeFileSync } from 'node:fs'
 import {
-  emptyRecap, onPlan, onPlanStep, planProgress, progressCells, progressSvg, crabSvg, tierOf, duration, barWidth, cardWidth, stateHex, STATE_FADE_MS, STATE_HEX,
+  emptyRecap, onSpawn, onStep, onComplete, workflowStages, onPlan, onPlanStep, planProgress, progressCells, progressSvg, crabSvg, tierOf, duration, barWidth, cardWidth, stateHex, STATE_FADE_MS, STATE_HEX,
 } from '../plugins/session-recap/hooks/recap.ts'
 
 const NOW = 95_000
@@ -86,6 +86,46 @@ const transitions = fades.map(([label, from, to]) => {
   return `<section class="band"><h3>${label}</h3>${rows}</section>`
 }).join('\n')
 
+// Workflow : une section par phase, agents lancés puis emplacements « à venir »
+const workflowHtml = (() => {
+  let r = onPlan(emptyRecap(), {
+    title: 'Livraison', isWorkflow: true, at: 0,
+    stages: [
+      { name: 'acquisition d’informations', steps: [{ name: 'lecture', agents: 3 }, { name: 'recherche', agents: 2 }] },
+      { name: 'développement de features', steps: [{ name: 'code', agents: 3 }] },
+      { name: 'tests', steps: [{ name: 'tests', agents: 2 }] },
+    ],
+  })
+  const M = ['claude-haiku-4-5', 'claude-sonnet-5-5', 'claude-opus-5-5']
+  const spawn = (id: string, model: string, task: string, effort: string, at: number) => {
+    r = onSpawn(r, { agentId: id, agent: 'roadmap:executant', model, fork: false, at, task })
+    r = onStep(r, { agentId: id, model, effort, at })
+  }
+  for (const [i, t] of ['lire le canon', 'lire la roadmap', 'lire le CLAUDE.md'].entries()) {
+    spawn('l' + i, M[i % 2]!, t, i % 2 ? 'medium' : 'low', 1000 * (i + 1))
+    r = onComplete(r, { agentId: 'l' + i, reason: 'answer', at: 4000 + i * 1000 })
+  }
+  r = onPlanStep(r, { step: 'lecture', status: 'done', at: 8000 })
+  spawn('r0', M[2]!, 'chercher les usages de la barre', 'high', 9000)
+  r = onComplete(r, { agentId: 'r0', reason: 'answer', at: 40_000 })
+  spawn('r1', M[1]!, 'comparer les rendus existants', 'medium', 41_000)
+  const stages = workflowStages(r)
+  const p = planProgress(r.plan!)
+  return `<section class="band"><h3>Workflow réel — phases, agents lancés et à venir</h3>
+  <div class="row" style="justify-content:center">${progressSvg(r.plan!, 420, NOW, 'wf')}</div>
+  ${stages.map((st, i) => {
+    const head = (st.planned > 0 ? st.done + '/' + st.planned + ' agents · ' : '') + st.name
+    const cards = st.runs.map(x => {
+      const done = x.status === 'done'
+      return `<div class="card ${done ? 'dim' : ''}">${crabSvg({ body: '#d97757', animated: !done, tier: tierOf(x.model), mono: done })}<div class="txt"><div class="t">${x.task ?? x.agent}</div><div class="dim">${x.model.replace('claude-', '')} · ${x.effort} — ${duration((x.endedAt ?? NOW) - x.startedAt)}</div></div></div>`
+    }).join('')
+    const ph = Array.from({ length: st.placeholders }, (_, k) => `<div class="card dim">${crabSvg({ mono: true })}<div class="txt"><div class="t">agent ${st.runs.length + k + 1} — à venir</div><div class="dim">en attente</div></div></div>`).join('')
+    const first = i === 0 ? `<span style="color:${COLOR.running}">⠋ ${p.percent} % · ${head} · 1 min 35:</span>` : `<span class="${st.status === 'todo' ? 'dim' : ''}">${head}:</span>`
+    return `<div style="margin-top:10px">${first}<div class="grid">${cards}${ph}</div></div>`
+  }).join('')}
+  </section>`
+})()
+
 // Terminal : Raster = cellules colorées, rejouées image par image.
 const running = scenario(3, 'running')
 const COLS = 24
@@ -128,6 +168,8 @@ svg{display:block}
 ${cases.map(band).join('\n')}
 <h2>Toutes les tailles — largeur de la barre et des cartes</h2>
 ${sizes}
+<h2>Workflow</h2>
+${workflowHtml}
 <h2>Transition de couleur (fondu de 0,9 s)</h2>
 ${transitions}
 <h2>Terminal — Raster (cellules colorées, image par image)</h2>

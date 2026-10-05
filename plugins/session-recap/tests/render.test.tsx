@@ -58,8 +58,11 @@ test('le panneau récap montre principal, limites, timeline et consommation', as
       plugin: 'session-recap', surface, component: 'AbovePrompt',
       props: { hasSurvey: false, isWorking: false, maxRows: 5, bodyColumns: 120, scroll: SCROLL, view: {} },
     })
-    expect(await withPlan.find({ type: 'Text', text: /25 % · 1\/4/ })).toBeDefined()
+    expect(await withPlan.find({ type: 'Text', text: /25 % · Lire/ })).toBeDefined()
     expect(await withPlan.find({ type: 'Text', text: /mid-5-5 · low/ })).toBeDefined()
+    // workflow : une section par phase, agents prévus en emplacements « à venir »
+    expect(await withPlan.find({ type: 'Text', text: /0\/2 agents · Faire/ })).toBeDefined()
+    expect(await withPlan.find({ type: 'Text', text: /agent 1 — à venir/ })).toBeDefined()
     await withPlan.unmount()
     await band.unmount()
   }

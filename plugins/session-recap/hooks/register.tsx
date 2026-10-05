@@ -28,6 +28,7 @@ import {
   crabSvg,
   barWidth,
   isFading,
+  workflowStages,
   stateHex,
   cardWidth,
   tierOf,
@@ -431,11 +432,13 @@ export const register: Register = (on, options) => {
                 />
               </Box>
             )}
-            <Text color={color} wrap="truncate-end">
-              {isTerminal ? ' ' : `${spin} `}
-              {prog.percent} % · {prog.done}/{prog.total}
-              {prog.agentsPlanned > 0 ? ` · ${prog.agentsDone}/${prog.agentsPlanned} agents` : ''} · {elapsed}{' '}
-            </Text>
+            {!plan.isWorkflow && (
+              <Text color={color} wrap="truncate-end">
+                {isTerminal ? ' ' : `${spin} `}
+                {prog.percent} % · {prog.done}/{prog.total}
+                {prog.agentsPlanned > 0 ? ` · ${prog.agentsDone}/${prog.agentsPlanned} agents` : ''} · {elapsed}{' '}
+              </Text>
+            )}
           </Box>
         )}
         {plan !== null && !isHidden && (
@@ -458,40 +461,78 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
+    const card = (r: (typeof strips)[number]) => {
+      const crabBody = r.status === 'failed' ? '#ef4444' : r.status === 'done' ? '#8a7f7a' : '#d97757'
+      const tint = r.status === 'failed' ? 'red' : undefined
+      return (
+        <Box key={`strip-${r.id}`} width={cardWidth(e.props.bodyColumns)} borderStyle="round" paddingX={1}>
+          <Box>
+            {isTerminal ? (
+              <Text color={tint} dimColor={r.status === 'done'}>{TIER_EMOJI[tierOf(r.model)]} </Text>
+            ) : (
+              <els.Svg
+                key={`crab-${r.id}`}
+                source={crabSvg({ body: crabBody, animated: r.status === 'running', tier: tierOf(r.model), mono: r.status === 'done' })}
+                alt={`agent ${tierOf(r.model)}`}
+                isInteractive
+              />
+            )}
+            <Box flexDirection="column" paddingLeft={1}>
+              <Text color={tint} dimColor={r.status === 'done'} wrap="truncate-end">{r.task ?? r.agent}</Text>
+              <Text dimColor wrap="truncate-end">
+                {shortModel(r.model)} · {r.effort}
+                {r.tool !== undefined && r.status === 'running' ? ` (${r.tool})` : ''} — {duration((r.endedAt ?? now) - r.startedAt)}
+              </Text>
+            </Box>
+          </Box>
+        </Box>
+      )
+    }
+    // emplacement d'un agent prévu par le workflow et pas encore lancé
+    const placeholder = (key: string, n: number) => (
+      <Box key={key} width={cardWidth(e.props.bodyColumns)} borderStyle="round" paddingX={1}>
+        {isTerminal ? (
+          <Text dimColor>◌ </Text>
+        ) : (
+          <els.Svg source={crabSvg({ mono: true })} alt="agent à venir" isInteractive />
+        )}
+        <Box flexDirection="column" paddingLeft={1}>
+          <Text dimColor wrap="truncate-end">agent {n} — à venir</Text>
+          <Text dimColor wrap="truncate-end">en attente</Text>
+        </Box>
+      </Box>
+    )
+    const stages = workflowStages(s)
+    const showWorkflow = plan !== null && plan.isWorkflow && stages.length > 0
+
     if (isHidden || (plan === null && strips.length === 0)) return <Box key="band" flexDirection="column">{identity}</Box>
 
     return (
       <Box key="band" flexDirection="column">
         {identity}
-        {strips.length > 0 && (
-          <Box key="agent-grid" flexDirection="row" flexWrap="wrap" width="100%">
-            {strips.map(r => {
-              const crabBody = r.status === 'failed' ? '#ef4444' : r.status === 'done' ? '#8a7f7a' : '#d97757'
-              const tint = r.status === 'failed' ? 'red' : undefined
-              return (
-                <Box key={`strip-${r.id}`} width={cardWidth(e.props.bodyColumns)} borderStyle="round" paddingX={1}>
-                  <Box>
-                    {isTerminal ? (
-                      <Text color={tint} dimColor={r.status === 'done'}>{TIER_EMOJI[tierOf(r.model)]} </Text>
-                    ) : (
-                      <els.Svg
-                        key={`crab-${r.id}`}
-                        source={crabSvg({ body: crabBody, animated: r.status === 'running', tier: tierOf(r.model), mono: r.status === 'done' })}
-                        alt={`agent ${tierOf(r.model)}`}
-                        isInteractive
-                      />
-                    )}
-                    <Box flexDirection="column" paddingLeft={1}>
-                      <Text color={tint} dimColor={r.status === 'done'} wrap="truncate-end">{r.task ?? r.agent}</Text>
-                      <Text dimColor wrap="truncate-end">
-                        {shortModel(r.model)} · {r.effort}
-                        {r.tool !== undefined && r.status === 'running' ? ` (${r.tool})` : ''} — {duration((r.endedAt ?? now) - r.startedAt)}
-                      </Text>
-                    </Box>
-                  </Box>
+        {showWorkflow &&
+          stages.map((st, i) => {
+            const head = `${st.planned > 0 ? `${st.done}/${st.planned} agents · ` : ''}${st.name}`
+            const sc = st.status === 'failed' ? 'red' : st.status === 'running' ? color : undefined
+            return (
+              <Box key={`stage-${i}`} flexDirection="column" width="100%">
+                {i === 0 ? (
+                  <Text color={color} wrap="truncate-end">
+                    {isTerminal ? ' ' : `${spin} `}{prog?.percent} % · {head} · {elapsed}:
+                  </Text>
+                ) : (
+                  <Text color={sc} dimColor={st.status === 'todo'} wrap="truncate-end">{head}:</Text>
+                )}
+                <Box key={`grid-${i}`} flexDirection="row" flexWrap="wrap" width="100%">
+                  {st.runs.map(card)}
+                  {Array.from({ length: st.placeholders }, (_, k) => placeholder(`ph-${i}-${k}`, st.runs.length + k + 1))}
                 </Box>
-              )
-            })}
+              </Box>
+            )
+          })}
+        {!showWorkflow && strips.length > 0 && (
+          <Box key="agent-grid" flexDirection="row" flexWrap="wrap" width="100%">
+            {strips.map(card)}
           </Box>
         )}
       </Box>
