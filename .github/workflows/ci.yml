@@ -54,7 +54,7 @@ jobs:
       - name: Add marketplace and install the plugin
         run: |
           claude plugin marketplace add ./
-          claude plugin install roadmap@marketplace
+          claude plugin install orchestration@marketplace
 
       - name: Check the plugin is installed and enabled
         run: |
@@ -62,8 +62,8 @@ jobs:
           claude plugin list --json | python3 -c '
           import json, sys
           plugins = {p["id"]: p for p in json.load(sys.stdin)}
-          p = plugins.get("roadmap@marketplace")
-          assert p is not None, f"roadmap@marketplace absent : {sorted(plugins)}"
-          assert p.get("enabled"), f"roadmap@marketplace installé mais désactivé : {p}"
-          print("roadmap@marketplace", p.get("version"), "installé et activé")
+          p = plugins.get("orchestration@marketplace")
+          assert p is not None, f"orchestration@marketplace absent : {sorted(plugins)}"
+          assert p.get("enabled"), f"orchestration@marketplace installé mais désactivé : {p}"
+          print("orchestration@marketplace", p.get("version"), "installé et activé")
           '

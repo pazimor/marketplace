@@ -78,7 +78,7 @@ AGENT = """\
     description: >-
       Point d'entrée, sur
       plusieurs lignes.
-    model: fable
+    model: sonnet
     effort: high
     # commentaire
     ---
@@ -110,12 +110,12 @@ class Fixture:
             "name": "marketplace",
             "owner": {"name": "eddy"},
             "version": "0.3.0",
-            "plugins": [{"name": "roadmap", "source": "./plugins/roadmap", "description": "x"}],
+            "plugins": [{"name": "orchestration", "source": "./plugins/orchestration", "description": "x"}],
         }))
-        self.write("plugins/roadmap/.claude-plugin/plugin.json",
-                   json.dumps({"name": "roadmap", "version": "0.2.0"}))
-        self.write("plugins/roadmap/agents/orchestrator.md", dedent(AGENT))
-        self.write("plugins/roadmap/skills/roadmap-tracker/SKILL.md", dedent(SKILL))
+        self.write("plugins/orchestration/.claude-plugin/plugin.json",
+                   json.dumps({"name": "orchestration", "version": "0.2.0"}))
+        self.write("plugins/orchestration/agents/orchestrator.md", dedent(AGENT))
+        self.write("plugins/orchestration/skills/roadmap-tracker/SKILL.md", dedent(SKILL))
         for name, body in VALID_CANON.items():
             self.write(f".claude/canon/{name}", dedent(body))
         self.write(".claude/roadmap.md", dedent(VALID_ROADMAP))
@@ -170,7 +170,7 @@ class TestValidFixture(Base):
             self.assertEqual(validate.main([str(self.fx.root / "absent")]), 2)
 
     def test_strict_fails_on_warnings(self):
-        self.fx.write("plugins/roadmap/agents/orchestrator.md", dedent(AGENT).replace("effort: high", "hooks: {}"))
+        self.fx.write("plugins/orchestration/agents/orchestrator.md", dedent(AGENT).replace("effort: high", "hooks: {}"))
         with redirect_stdout(io.StringIO()):
             self.assertEqual(validate.main([str(self.fx.root)]), 0)
             self.assertEqual(validate.main([str(self.fx.root), "--strict"]), 1)
@@ -191,23 +191,23 @@ class TestValidFixture(Base):
 
 class TestManifests(Base):
     def test_invalid_json(self):
-        self.fx.write("plugins/roadmap/.claude-plugin/plugin.json", '{"name": "roadmap",}')
+        self.fx.write("plugins/orchestration/.claude-plugin/plugin.json", '{"name": "orchestration",}')
         self.assertError("manifest.json")
 
     def test_missing_version(self):
-        self.fx.write("plugins/roadmap/.claude-plugin/plugin.json", json.dumps({"name": "roadmap"}))
+        self.fx.write("plugins/orchestration/.claude-plugin/plugin.json", json.dumps({"name": "orchestration"}))
         self.assertError("manifest.plugin-version")
 
     def test_non_semver_version(self):
-        self.fx.write("plugins/roadmap/.claude-plugin/plugin.json", json.dumps({"name": "roadmap", "version": "1.2"}))
+        self.fx.write("plugins/orchestration/.claude-plugin/plugin.json", json.dumps({"name": "orchestration", "version": "1.2"}))
         self.assertError("manifest.plugin-version")
 
     def test_missing_plugin_name(self):
-        self.fx.write("plugins/roadmap/.claude-plugin/plugin.json", json.dumps({"version": "1.0.0"}))
+        self.fx.write("plugins/orchestration/.claude-plugin/plugin.json", json.dumps({"version": "1.0.0"}))
         self.assertError("manifest.plugin-name")
 
     def test_name_mismatch(self):
-        self.fx.write("plugins/roadmap/.claude-plugin/plugin.json", json.dumps({"name": "other", "version": "1.0.0"}))
+        self.fx.write("plugins/orchestration/.claude-plugin/plugin.json", json.dumps({"name": "other", "version": "1.0.0"}))
         self.assertError("manifest.name-mismatch")
 
     def test_missing_owner(self):
@@ -228,8 +228,8 @@ class TestManifests(Base):
 
 
 class TestFrontmatter(Base):
-    AGENT_PATH = "plugins/roadmap/agents/orchestrator.md"
-    SKILL_PATH = "plugins/roadmap/skills/roadmap-tracker/SKILL.md"
+    AGENT_PATH = "plugins/orchestration/agents/orchestrator.md"
+    SKILL_PATH = "plugins/orchestration/skills/roadmap-tracker/SKILL.md"
 
     def test_missing_frontmatter(self):
         self.fx.write(self.SKILL_PATH, "# Pas de frontmatter\n")
@@ -248,15 +248,54 @@ class TestFrontmatter(Base):
         self.assertError("frontmatter.name")
 
     def test_bad_model(self):
-        self.fx.replace(self.AGENT_PATH, "model: fable", "model: gpt-5")
+        self.fx.replace(self.AGENT_PATH, "model: sonnet", "model: gpt-5")
         self.assertError("frontmatter.model")
 
     def test_model_id_accepted(self):
-        self.fx.replace(self.AGENT_PATH, "model: fable", "model: claude-opus-4-8[1m]")
+        self.fx.replace(self.AGENT_PATH, "model: sonnet", "model: claude-opus-4-8[1m]")
         self.assertEqual(self.run_validate().findings, [])
 
     def test_quoted_model_accepted(self):
-        self.fx.replace(self.AGENT_PATH, "model: fable", 'model: "inherit"')
+        self.fx.replace(self.AGENT_PATH, "model: sonnet", 'model: "haiku"')
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_forbidden_model(self):
+        for model in ("fable", "claude-fable-5-1"):
+            with self.subTest(model=model):
+                self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("model: sonnet", f"model: {model}"))
+                self.assertError("frontmatter.model-forbidden")
+
+    def test_agent_without_model_warns(self):
+        for line in ("", "model: inherit\n"):
+            with self.subTest(line=line):
+                self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("model: sonnet\n", line))
+                self.assertWarning("frontmatter.model-missing")
+
+    def test_skill_without_model_ok(self):
+        self.assertNotIn("model:", self.fx.read(self.SKILL_PATH))
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_model_named_in_agent_body(self):
+        self.fx.replace(self.AGENT_PATH, "Corps.", "Délègue à Opus.")
+        self.assertError("plugin.model-mention")
+
+    def test_model_named_in_description(self):
+        self.fx.replace(self.AGENT_PATH, "plusieurs lignes.", "plusieurs lignes, tourne sur sonnet.")
+        self.assertError("plugin.model-mention")
+
+    def test_model_named_in_skill_or_manifest(self):
+        for rel, old in (("plugins/orchestration/skills/roadmap-tracker/SKILL.md", "# Corps"),
+                         ("plugins/orchestration/.claude-plugin/plugin.json", '"orchestration"')):
+            with self.subTest(rel=rel):
+                fx = Fixture()
+                self.addCleanup(fx.cleanup)
+                new = "# Corps haiku" if rel.endswith(".md") else '"orchestration", "description": "Haiku"'
+                fx.replace(rel, old, new)
+                report = validate.validate(fx.root)
+                self.assertIn("plugin.model-mention", report.codes(validate.ERROR))
+
+    def test_model_word_inside_other_word_ok(self):
+        self.fx.replace(self.AGENT_PATH, "Corps.", "Corps : magnum opuscule.")
         self.assertEqual(self.run_validate().findings, [])
 
     def test_bad_effort(self):

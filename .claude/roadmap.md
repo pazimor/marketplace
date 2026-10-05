@@ -35,6 +35,21 @@
     s'il existe > fetch serveur, + force-fetch pour se réaligner. Aucune dépendance GitHub
     (décision commanditaire 2026-09-01).
 
+- `ROADMAP:SPEC:5` **Plugin level design 3D — le goût, écrit** [active]
+  - Canon : `CANON:15`, `CANON:16`. Un plugin `level-design` distinct de `roadmap` : skill
+    `level-design-taste` (lecture du brief, 4 curseurs, tics de l'IA, pre-flight mesurable,
+    références extérieur / intérieur / rendu / audits), skill `level-design-build` (procédure
+    spec → passe idempotente → audit → captures → revue → livraison), agent
+    `level-design-reviewer`. Source : le projet de jeu (reviewer, contrôle qualité LD,
+    look bible, specs d'arène), rendu générique.
+
+- `ROADMAP:SPEC:6` **Mod récap de session — voir qui tourne, sur quoi, pour combien** [active]
+  - Canon : `CANON:23`, `CANON:24`. Un Mod Claude Code (plugin standard) qui affiche en
+    permanence l'agent de démarrage, la timeline des agents par prompt (neufs, repris,
+    forkés), le modèle résolu et l'effort de chacun, les tokens par agent × modèle × effort
+    et les limites 5 h / 7 jours avec prévision. Lecture seule d'abord, alertes ensuite.
+    Plan détaillé : `docs/plan-session-recap.md`.
+
 Règles :
 - Le fichier est le format ; un serveur n'est qu'un transport (jamais l'inverse).
 - Une entrée canon `[USER]` ne se réécrit pas ; le modèle signale les conflits.
@@ -101,6 +116,26 @@ fonctionne toujours strictement sans serveur.
 - [ ] `ROADMAP:TASK:14` Écriture conditionnelle (concurrence optimiste) côté serveur + rituel re-fetch/merge/re-push côté skill _(implements ROADMAP:SPEC:4; depends on ROADMAP:TASK:13)_
 - [ ] `ROADMAP:TASK:15` Résolution client (repo local > serveur, force-fetch) + provenance multi-auteurs [USER:<nom>] _(implements ROADMAP:SPEC:2, ROADMAP:SPEC:4; depends on ROADMAP:TASK:13, ROADMAP:TASK:14)_
 
+## M5 — Mod récap de session (`ROADMAP:MILESTONE:5`, active)
+
+Rendre visible la consommation par agent après la limite hebdomadaire mangée par
+l'héritage de modèle. Chaque phase du plan ne démarre qu'après validation de la précédente
+par l'utilisateur ; les changements de config sont montrés avant d'être appliqués.
+
+DoD du milestone : dans Claude Code Desktop, une session scribe → orchestrateur →
+exécutants affiche (panneau ou repli compact) l'agent de démarrage, chaque agent par prompt
+avec instance, modèle résolu, effort et tokens, et les jauges 5 h / 7 jours ; le Mod
+s'installe depuis le marketplace avec la version de Claude Code testée dans sa description.
+
+- [x] `ROADMAP:TASK:26` Prérequis : Claude Code ≥ 2.1.287, flag des function hooks, `/plugin-types` versionné, événements et surfaces UI relevés dans les déclarations _(implements ROADMAP:SPEC:6)_ — fait 2026-10-02 : 2.1.287, flag de déploiement serveur (pas de variable), déclarations dans `.claude/types/` (générées via `--plugin-dir`, `/plugin-types` n'existe pas), événements et `$.ui` relevés ; rendu Desktop reporté à `ROADMAP:TASK:33`
+- [ ] `ROADMAP:TASK:27` Phase 0 : audit de config et garde-fous (orchestrateur nommé et non forké, deny sur les spawns coûteux, `maxEffortLevel`, mesure de référence `/usage` + `/cost`) _(implements ROADMAP:SPEC:6)_ — reste la mesure de référence (utilisateur) et le retrait de `CLAUDE_CODE_EFFORT_LEVEL` à décider
+- [x] `ROADMAP:TASK:28` Phase 1 : sonde par hooks classiques, tableau des champs exposés par événement, contrôle croisé par les transcripts _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:26, ROADMAP:TASK:27)_ — fait 2026-10-02 : tableau et constats dans `docs/plan-session-recap.md` (effort écrasé par `CLAUDE_CODE_EFFORT_LEVEL`, `inherit` = parent immédiat, reprise sans `agent.spawn`)
+- [x] `ROADMAP:TASK:29` Phase 2 + 3 : Mod v0 en lecture seule (`/recap`) et rendu dans Desktop, avec replis _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:28)_ — fait 2026-10-02 : `plugins/session-recap/` 0.1.0, commande `/session-recap` (`/recap` est intégrée), bandeau compact, 9 tests verts, session réelle sans erreur
+- [x] `ROADMAP:TASK:30` Phase 4 : alertes de limites, seuils par agent, modèle inattendu, part du scribe _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — fait 2026-10-02 : toasts, seuils en `userConfig`
+- [x] `ROADMAP:TASK:31` Phase 5 : packaging dans le marketplace, options du plugin, installation _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — fait 2026-10-02 : entrée catalogue, marketplace 0.7.0, CHANGELOG, README, CLAUDE.md, smoke test d'installation en HOME vierge
+- [x] `ROADMAP:TASK:32` Retirer la sonde `~/.claude/skills/session-recap/` (échafaudage créé le 2026-10-02 pour générer `.claude/types/`) dès que le vrai plugin vit dans le repo _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — fait 2026-10-02 : supprimée (elle occupait `/session-recap` dans les sessions Desktop)
+- [ ] `ROADMAP:TASK:33` Vérifier le rendu du panneau `/session-recap` et du bandeau dans Claude Code Desktop une fois l'app en 2.1.287 (elle embarque 2.1.284) ; relever la `surface` _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_
+
 ## Backlog (no milestone)
 
 - [x] `ROADMAP:TASK:17` CI GitHub Actions : manifestes, frontmatter agents/skills, grammaire canon + roadmap, smoke test d'installation du plugin _(implements ROADMAP:SPEC:1, ROADMAP:SPEC:2; depends on ROADMAP:TASK:18)_ — fait 2026-09-24 : `.github/workflows/ci.yml`
@@ -110,3 +145,7 @@ fonctionne toujours strictement sans serveur.
 - [x] `ROADMAP:TASK:21` Traçabilité de TASK:8 : l'orchestrateur note ce qui a coincé après chaque session réelle _(implements ROADMAP:SPEC:3)_ — fait 2026-09-24 : seconde question du rituel de capture
 
 - [ ] `ROADMAP:TASK:16` [RÉFLEXION] Recherche full-text dans un gros canon d'entreprise (jamais d'embeddings — décision 2026-09-01) _(implements ROADMAP:SPEC:4)_
+- [x] `ROADMAP:TASK:22` Plugin `level-design` 0.1.0 : skills level-design-taste et level-design-build, agent level-design-reviewer _(implements ROADMAP:SPEC:5)_ — fait 2026-09-28
+- [ ] `ROADMAP:TASK:23` Valider le plugin `level-design` en usage réel sur le projet de jeu (prochaine map ou salle) et ajuster les skills _(implements ROADMAP:SPEC:5; depends on ROADMAP:TASK:22)_
+- [x] `ROADMAP:TASK:24` faire des tests de detection des taches et sous entandues avec diferents models pour pouvoir set l'orchestrateur sur un model en particuler ... si pas specifier ou inerit ... prend fable et Crame tout les tokens opus peut repartir le travaille mais sonnet ou haiku devra demander a un opus de faire le travaille de "get" de contexte a sa place -> a regarder _(implements ROADMAP:SPEC:3)_ — fait 2026-10-01 : micro-benchmark de cadrage (4 demandes pièges ; le petit modèle ≈ 50 %, le modèle intermédiaire ≈ 96 %, le plus capable 100 %), décision `CANON:22` : scribe + orchestrateur + exécutants à modèle fixé dans leur fichier, advisor, plugin 0.5.0
+- [ ] `ROADMAP:TASK:25` Valider en usage réel la chaîne scribe → orchestrateur → exécutants : imbrication de sous-agents sur deux niveaux, Workflow lancé depuis un sous-agent, advisor actif sur les exécutants, coût comparé à l'ancien `inherit` _(implements ROADMAP:SPEC:3; depends on ROADMAP:TASK:24)_

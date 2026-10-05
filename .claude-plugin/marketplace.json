@@ -4,13 +4,23 @@
     "name": "eddy-hummel",
     "email": "eddy.hummel@gmail.com"
   },
-  "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, for Claude Code",
-  "version": "0.4.0",
+  "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a session-recap mod, for Claude Code",
+  "version": "0.11.0",
   "plugins": [
     {
-      "name": "roadmap",
-      "source": "./plugins/roadmap",
-      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus the `orchestrateur` agent: the non-coding model reframes, proposes options, scopes and splits the work, delegates each task to Opus/Sonnet/Haiku, verifies on return and captures the implicit into the canon. No MCP server required"
+      "name": "orchestration",
+      "source": "./plugins/orchestration",
+      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap; the `orchestrateur` scopes, delegates each task to an executor at the right reasoning effort, verifies on return and reports back; executors code. Each agent pins its own model in its file; an optional advisor corrects the smaller executors. No MCP server required"
+    },
+    {
+      "name": "level-design",
+      "source": "./plugins/level-design",
+      "description": "3D level-design taste and method, engine-agnostic: read the brief, set four dials (openness, density, relief, nature), ban the AI's defaults (square outlines, tiled floors, sprinkled props, lamp carpets, rainbow palettes), pass a measurable pre-flight; a build procedure (measured reference recipes, spec with questions, idempotent build pass, audits, fixed captures, honest delivery) and a level-design-reviewer agent that judges screenshots against the project's canon"
+    },
+    {
+      "name": "session-recap",
+      "source": "./plugins/session-recap",
+      "description": "Session recap mod (function hooks, tested on Claude Code 2.1.287; the mods API is early access): a live band (plan progress bar, workflow phases, one card per running agent with a model-tier icon), a pane (/session-recap) with a per-prompt timeline of subagents (new, resumed, forked), each agent's resolved model and effort, tokens by agent × model × effort, and the 5-hour / 7-day limits with a forecast; toasts warn on limit thresholds, token budgets, an unexpected model or a main agent eating the session. Read-only: it never blocks or rewrites anything"
     }
   ]
 }
