@@ -1,12 +1,12 @@
 ---
 name: roadmap-tracker
-description: Tenir la roadmap du projet dans un fichier markdown de la mémoire native (specs canon, milestones avec DoD, tâches à IDs stables, claims). Utiliser dès que l'utilisateur parle de roadmap, backlog, milestone, spec, tâche ou avancement — ajouter/modifier une entrée, prendre ou continuer une tâche, marquer terminé, demander où on en est — même si le mot « roadmap » n'est pas prononcé explicitement.
+description: Tenir la roadmap du projet dans un fichier markdown de la mémoire native (specs, milestones avec DoD, tâches à IDs stables, claims). Utiliser dès que l'utilisateur parle de roadmap, backlog, milestone, spec, tâche ou avancement — ajouter/modifier une entrée, prendre ou continuer une tâche, marquer terminé, demander où on en est — même si le mot « roadmap » n'est pas prononcé explicitement.
 ---
 
 # Roadmap tracker — la roadmap comme fichier mémoire
 
-La roadmap vit dans un fichier markdown à grammaire stricte. La spec est le
-canon, le fichier est l'état, et l'avancement se rapporte en éditant ce
+La roadmap vit dans un fichier markdown à grammaire stricte. La spec fait
+foi, le fichier est l'état, et l'avancement se rapporte en éditant ce
 fichier — de façon chirurgicale, sans jamais casser sa grammaire.
 
 ## Où vit la roadmap
@@ -20,9 +20,8 @@ fichier — de façon chirurgicale, sans jamais casser sa grammaire.
   C'est ce miroir, commité avec le projet, qui suit les changements de
   machine.
 - **Amorçage sur une nouvelle machine** : si la mémoire auto n'a pas de
-  `roadmap.md` mais que le repo contient `.claude/roadmap.md` (ou un ancien
-  export comme `_memory_migration/memory/roadmap.md`), copier le fichier du
-  repo vers la mémoire auto avant toute opération — le plus récent des deux
+  `roadmap.md` mais que le repo contient `.claude/roadmap.md`, copier le
+  fichier du repo vers la mémoire auto avant toute opération — le plus récent des deux
   gagne (comparer les dates de modification, signaler tout conflit).
 
 ## Grammaire du fichier (ne jamais s'en écarter)
@@ -102,14 +101,13 @@ Sinon → la tâche reste `[~]`, dire précisément ce qui manque.
 
 ## Implémenter une tâche
 
-1. **Canon d'abord** : lire la ou les specs de la tâche et les docs du repo
+1. **Spec d'abord** : lire la ou les specs de la tâche et les docs du repo
    qu'elles citent. La spec a déjà tranché le design — l'implémentation ne
    re-décide pas. Point bloquant ambigu : question à l'utilisateur ou
    marquage `blocked`, jamais une invention.
-2. **Contexte mémoire** : consulter les fichiers de mémoire du projet
-   (`decisions.md`, `conventions.md`, `bugs-pieges.md`,
-   `faits-contraintes.md`) sur le sujet avant de choisir une approche — les
-   décisions passées peuvent invalider un plan.
+2. **Canon du projet** : passer la gate de lecture du skill `canon-tracker`
+   (`.claude/canon/`) avant de choisir une approche — une entrée `[USER]`
+   peut invalider un plan.
 3. **Plan (gate)** : découper en incréments vérifiables — chaque incrément a
    un critère de succès objectif (test, commande, comportement démontré).
    Ordre par défaut : contrats/schémas → logique → interfaces → UI → docs.

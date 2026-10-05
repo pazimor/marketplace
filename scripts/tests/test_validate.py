@@ -78,7 +78,7 @@ AGENT = """\
     description: >-
       Point d'entrée, sur
       plusieurs lignes.
-    model: fable
+    model: sonnet
     effort: high
     # commentaire
     ---
@@ -248,15 +248,54 @@ class TestFrontmatter(Base):
         self.assertError("frontmatter.name")
 
     def test_bad_model(self):
-        self.fx.replace(self.AGENT_PATH, "model: fable", "model: gpt-5")
+        self.fx.replace(self.AGENT_PATH, "model: sonnet", "model: gpt-5")
         self.assertError("frontmatter.model")
 
     def test_model_id_accepted(self):
-        self.fx.replace(self.AGENT_PATH, "model: fable", "model: claude-opus-4-8[1m]")
+        self.fx.replace(self.AGENT_PATH, "model: sonnet", "model: claude-opus-4-8[1m]")
         self.assertEqual(self.run_validate().findings, [])
 
     def test_quoted_model_accepted(self):
-        self.fx.replace(self.AGENT_PATH, "model: fable", 'model: "inherit"')
+        self.fx.replace(self.AGENT_PATH, "model: sonnet", 'model: "haiku"')
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_forbidden_model(self):
+        for model in ("fable", "claude-fable-5-1"):
+            with self.subTest(model=model):
+                self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("model: sonnet", f"model: {model}"))
+                self.assertError("frontmatter.model-forbidden")
+
+    def test_agent_without_model_warns(self):
+        for line in ("", "model: inherit\n"):
+            with self.subTest(line=line):
+                self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("model: sonnet\n", line))
+                self.assertWarning("frontmatter.model-missing")
+
+    def test_skill_without_model_ok(self):
+        self.assertNotIn("model:", self.fx.read(self.SKILL_PATH))
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_model_named_in_agent_body(self):
+        self.fx.replace(self.AGENT_PATH, "Corps.", "Délègue à Opus.")
+        self.assertError("plugin.model-mention")
+
+    def test_model_named_in_description(self):
+        self.fx.replace(self.AGENT_PATH, "plusieurs lignes.", "plusieurs lignes, tourne sur sonnet.")
+        self.assertError("plugin.model-mention")
+
+    def test_model_named_in_skill_or_manifest(self):
+        for rel, old in (("plugins/roadmap/skills/roadmap-tracker/SKILL.md", "# Corps"),
+                         ("plugins/roadmap/.claude-plugin/plugin.json", '"roadmap"')):
+            with self.subTest(rel=rel):
+                fx = Fixture()
+                self.addCleanup(fx.cleanup)
+                new = "# Corps haiku" if rel.endswith(".md") else '"roadmap", "description": "Haiku"'
+                fx.replace(rel, old, new)
+                report = validate.validate(fx.root)
+                self.assertIn("plugin.model-mention", report.codes(validate.ERROR))
+
+    def test_model_word_inside_other_word_ok(self):
+        self.fx.replace(self.AGENT_PATH, "Corps.", "Corps : magnum opuscule.")
         self.assertEqual(self.run_validate().findings, [])
 
     def test_bad_effort(self):

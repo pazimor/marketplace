@@ -1,0 +1,4 @@
+{
+  "description": "Récap de session : observe les agents, modèles, efforts, tokens et limites, sans rien modifier.",
+  "modules": ["register.tsx"]
+}

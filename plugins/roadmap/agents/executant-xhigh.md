@@ -2,8 +2,10 @@
 name: executant-xhigh
 description: >-
   Exécutant d'un brief de tâche scopée, effort de raisonnement « xhigh » — architecture, audit, migration longue, bug introuvable.
-  Appelé par l'agent orchestrateur (qui choisit le modèle à l'appel), jamais directement
+  Appelé par l'agent orchestrateur (qui choisit l'effort ; le modèle est fixé ici), jamais directement
   par l'utilisateur : ne pas sélectionner cet agent de sa propre initiative.
+model: sonnet
+# Le modèle ne se nomme qu'ici (CANON:22) ; un advisor configuré le corrige en cours de tâche.
 effort: xhigh
 ---
 

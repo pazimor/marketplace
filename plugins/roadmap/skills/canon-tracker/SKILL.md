@@ -114,8 +114,9 @@ fil de l'eau.
 
 ## Rituel de capture (obligatoire à chaque clôture de tâche)
 
-L'agent orchestrateur exécute ce rituel à la clôture de **chaque** tâche, avant
-de cocher quoi que ce soit. Ce n'est pas optionnel et ça ne se reporte pas.
+L'agent scribe exécute ce rituel à la clôture de **chaque** tâche, avant de
+cocher quoi que ce soit, à partir de la conversation et des constats remontés par
+l'orchestrateur.
 
 1. Se demander explicitement : **« qu'est-ce qui a été mis au point d'implicite
    pendant cette passe ? »**

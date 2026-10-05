@@ -215,6 +215,10 @@ def check_manifests(report: Report, root: Path) -> None:
 
 MODEL_ALIASES = {"opus", "sonnet", "haiku", "fable", "inherit"}
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+# Gamme interdite dans les agents distribués (`CANON:22`) : alias et IDs `claude-<gamme>-*`.
+FORBIDDEN_MODELS = {"fable"}
+# Les modèles ne se nomment que sur la ligne `model:` du frontmatter d'un agent (`CANON:22`).
+MODEL_NAME_RE = re.compile(r"\b(opus|sonnet|haiku|fable)\b", re.IGNORECASE)
 PLUGIN_AGENT_IGNORED = ("hooks", "mcpServers", "permissionMode")
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FM_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)\s*:(?:\s+(.*?))?\s*$")
@@ -300,6 +304,14 @@ def check_frontmatter_file(report: Report, path: Path, kind: str) -> None:
         if model not in MODEL_ALIASES and not re.match(r"^claude-[a-z0-9][a-z0-9.\-\[\]]*$", model):
             report.error("frontmatter.model", path, line,
                          f"`model` invalide : {model!r} (attendu {sorted(MODEL_ALIASES)} ou un ID `claude-*`)")
+        family = re.sub(r"^claude-", "", model).split("-")[0]
+        if family in FORBIDDEN_MODELS:
+            report.error("frontmatter.model-forbidden", path, line,
+                         f"`model` interdit : {model!r} (gamme trop coûteuse, `CANON:22`)")
+    if kind == "agent" and data.get("model", ("inherit", 0))[0] == "inherit":
+        report.warn("frontmatter.model-missing", path, data.get("model", (None, None))[1],
+                    "agent de plugin sans `model` explicite : il hérite du modèle de session, "
+                    "qui peut être une gamme interdite (`CANON:22`)")
     if "effort" in data:
         effort, line = data["effort"]
         if effort not in EFFORTS:
@@ -317,6 +329,24 @@ def check_frontmatters(report: Report, root: Path) -> None:
         check_frontmatter_file(report, path, "agent")
     for path in sorted(root.glob("plugins/*/skills/*/SKILL.md")):
         check_frontmatter_file(report, path, "skill")
+
+
+def check_model_mentions(report: Report, root: Path) -> None:
+    """Aucun nom de modèle dans un plugin hors de la ligne `model:` d'un frontmatter d'agent."""
+    for path in sorted(root.glob("plugins/**/*")):
+        if not path.is_file() or path.suffix not in (".md", ".json"):
+            continue
+        text = read_text(report, path)
+        if text is None:
+            continue
+        is_agent = path.parent.name == "agents" and path.suffix == ".md"
+        for n, line in enumerate(text.splitlines(), 1):
+            if is_agent and re.match(r"^model\s*:", line):
+                continue
+            m = MODEL_NAME_RE.search(line)
+            if m:
+                report.error("plugin.model-mention", path, n,
+                             f"modèle nommé hors du frontmatter d'agent : {m.group(0)!r} (`CANON:22`)")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -797,6 +827,7 @@ def validate(root: Path) -> Report:
     report = Report(root)
     check_manifests(report, root)
     check_frontmatters(report, root)
+    check_model_mentions(report, root)
     canon = check_canon(report, root)
     check_roadmap(report, root, canon)
     return report

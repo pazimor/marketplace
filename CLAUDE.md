@@ -4,23 +4,37 @@ Guide pour Claude Code quand il travaille dans ce repo.
 
 ## Ce qu'est ce repo
 
-Une **marketplace de plugins Claude Code** qui distribue un seul plugin, `roadmap`, sans
-serveur. Tout ce qu'il produit est un fichier markdown dans le repo de l'utilisateur :
+Une **marketplace de plugins Claude Code** qui distribue trois plugins sans serveur : `roadmap`
+(ci-dessous), `level-design` (goût et méthode de level design 3D, `CANON:15`) et
+`session-recap` (Mod de récap de session en function hooks, `CANON:23`).
+`roadmap` ne produit que des fichiers markdown dans le repo de l'utilisateur :
 - `.claude/roadmap.md` : specs, milestones avec DoD, tâches à IDs stables, claims (skill `roadmap-tracker`)
 - `.claude/canon/*.md` : attentes, conventions, tests, invariants, chaque entrée avec sa provenance `[USER:<nom>]` / `[MODEL]` (skill `canon-tracker`)
-- l'agent `orchestrateur` (Fable) cadre la demande, délègue chaque tâche scopée en choisissant **modèle × effort**, vérifie au retour et capture l'implicite dans le canon
+- les agents `scribe`, `orchestrateur` et l'agent principal (« default ») sont trois pairs égaux qui se parlent directement (`CANON:27`) : le scribe tient canon + roadmap ; celui qui a cadré la demande avec l'utilisateur confie un dossier de cadrage à l'agent `orchestrateur`, qui délègue chaque tâche scopée en choisissant **l'effort**, vérifie au retour et rend compte ; le scribe capture l'implicite dans le canon
 
 Ce repo applique lui-même son plugin : **lire `.claude/canon/*.md` et `.claude/roadmap.md` avant d'agir.**
 
 ## Arborescence
 
 ```
-.claude-plugin/marketplace.json     # catalogue (un plugin : roadmap)
+.claude-plugin/marketplace.json     # catalogue (roadmap, level-design, session-recap)
 plugins/roadmap/
 ├── .claude-plugin/plugin.json      # version semver du plugin
-├── agents/orchestrator.md          # orchestrateur (model: fable, hérite de l'effort de session)
+├── agents/scribe.md                # scribe : pair, tient canon + roadmap, ne code pas, ne relaie rien
+├── agents/orchestrator.md          # orchestrateur : pair, délègue, vérifie, rend compte à l'appelant
 ├── agents/executant-{low,medium,high,xhigh,max}.md   # exécutants : ne diffèrent que par `effort`
 └── skills/{roadmap-tracker,canon-tracker}/SKILL.md   # propriétaires des grammaires
+plugins/level-design/
+├── .claude-plugin/plugin.json      # version semver du plugin
+├── agents/level-design-reviewer.md # juge sur captures (lecture seule)
+└── skills/{level-design-taste,level-design-build}/  # SKILL.md + references/
+plugins/session-recap/              # Mod (function hooks, API en early access, `CANON:24`)
+├── .claude-plugin/plugin.json      # version, options (`userConfig`), contrat `types`
+├── hooks/{hooks.json,register.tsx,recap.ts}   # module de hooks + modèle pur
+├── types/index.d.ts                # état déclaré au moteur (PluginState)
+└── tests/                          # `claude plugin test plugins/session-recap`
+.claude/types/                      # déclarations du moteur (2.1.287), régénérées à chaque version
+docs/plan-session-recap.md          # plan et constats du Mod (prérequis, phases, hypothèses)
 docs/grammar.md                     # grammaire canon + roadmap en EBNF (décrit les SKILL.md, n'en décide pas)
 scripts/validate.py                 # validateur stdlib : manifestes, frontmatter, canon, roadmap
 scripts/tests/                      # tests du validateur (unittest)
@@ -35,6 +49,7 @@ CHANGELOG.md
 python3 scripts/validate.py .                       # 0 erreur attendu ; --strict fait aussi échouer les WARN
 python3 -m unittest discover -s scripts/tests -q    # tests du validateur
 claude plugin validate . && claude plugin validate plugins/roadmap
+claude plugin validate plugins/session-recap && claude plugin test plugins/session-recap
 cd market-mem/mcp && python -m pytest -q            # tests d'auth (pip install -r requirements.txt pytest httpx)
 ```
 
@@ -50,6 +65,9 @@ authentification n'est requise.
   canon/roadmap changée ou agent/skill retiré) **et** ajouter une entrée dans `CHANGELOG.md`.
   Un changement du catalogue augmente aussi `version` dans `.claude-plugin/marketplace.json`.
   Lancer `python3 scripts/validate.py .` avant de commiter.
+- **Modèles (`CANON:22`).** Un modèle ne se nomme que sur la ligne `model:` du frontmatter
+  de l'agent — jamais dans le texte des agents, skills, manifestes, README ou ce fichier.
+  La gamme la plus coûteuse est interdite ; `validate.py` refuse les deux écarts.
 - **Rester générique (`CANON:8`).** Aucun projet ni outil particulier (Unity, prefab…) dans
   les agents et skills distribués : ces détails vivent dans le canon du projet utilisateur.
 - **Les grammaires appartiennent aux SKILL.md (`CANON:3`).** Si une règle de grammaire change,
