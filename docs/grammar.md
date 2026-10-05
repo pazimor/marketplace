@@ -1,13 +1,13 @@
 # Grammaire formelle — canon et roadmap
 
-Ce document **décrit** la grammaire que définissent les deux skills du plugin `roadmap`.
+Ce document **décrit** la grammaire que définissent les deux skills du plugin `orchestration`.
 Il n'en invente aucune variante : les SKILL.md restent seuls propriétaires de la grammaire
 (`CANON:3`). En cas d'écart entre ce document et un SKILL.md, le SKILL.md fait foi et ce
 document est à corriger.
 
-- Canon : `plugins/roadmap/skills/canon-tracker/SKILL.md`, § « Où vit le canon »,
+- Canon : `plugins/orchestration/skills/canon-tracker/SKILL.md`, § « Où vit le canon »,
   § « Grammaire d'une entrée », § « Provenance », § « Opérations courantes ».
-- Roadmap : `plugins/roadmap/skills/roadmap-tracker/SKILL.md`, § « Où vit la roadmap »,
+- Roadmap : `plugins/orchestration/skills/roadmap-tracker/SKILL.md`, § « Où vit la roadmap »,
   § « Grammaire du fichier » (bloc « Structure du fichier » + « Conventions »),
   § « Opérations courantes ».
 

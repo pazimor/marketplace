@@ -124,13 +124,13 @@ import { BRAILLE_TRACK, crabSvg, progressCells, progressSvg, duration, isScribe,
 test('agent principal : nommé, ou déduit du lancement de l\'orchestrateur', () => {
   let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: 'default', model: 'm', at: 0 })
   expect(s.runs[MAIN]!.agent).toBe('défaut')
-  s = onSpawn(s, { agentId: 'o1', agent: 'roadmap:orchestrateur', model: 'm', fork: false, at: 1 })
-  expect(s.runs[MAIN]!.agent).toBe('roadmap:scribe')
+  s = onSpawn(s, { agentId: 'o1', agent: 'orchestration:orchestrateur', model: 'm', fork: false, at: 1 })
+  expect(s.runs[MAIN]!.agent).toBe('orchestration:scribe')
   expect(s.startInferred).toBe(true)
   expect(isScribe(s.runs[MAIN]!.agent)).toBe(true)
   s = onSessionStart(s, { surface: 'desktop', agent: undefined, model: 'm', at: 2 }) // rechargement
-  expect(s.runs[MAIN]!.agent).toBe('roadmap:scribe')
-  s = onSessionStart(s, { surface: 'desktop', agent: 'roadmap:scribe', model: 'm', at: 3 })
+  expect(s.runs[MAIN]!.agent).toBe('orchestration:scribe')
+  s = onSessionStart(s, { surface: 'desktop', agent: 'orchestration:scribe', model: 'm', at: 3 })
   expect(s.startInferred).toBe(false)
 })
 
@@ -164,7 +164,7 @@ test('plan à phases : état par intitulé conservé quand le plan est renvoyé,
 })
 
 test('bandes de sous-agents : actifs, en échec, ou finis depuis moins de 5 s', () => {
-  let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: 'roadmap:scribe', model: 'm', at: 0 })
+  let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: 'orchestration:scribe', model: 'm', at: 0 })
   s = onSpawn(s, { agentId: 'x1', agent: 'executant-low', model: 'm', fork: false, at: 1 })
   s = onToolUse(s, { agentId: 'x1', tool: 'Read' })
   expect(s.runs.x1!.tool).toBe('Read')
@@ -176,7 +176,7 @@ test('bandes de sous-agents : actifs, en échec, ou finis depuis moins de 5 s', 
 })
 
 test('barre pondérée par les agents prévus : avance à chaque agent terminé, plafonnée avant la vérification', () => {
-  let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: 'roadmap:scribe', model: 'm', at: 0 })
+  let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: 'orchestration:scribe', model: 'm', at: 0 })
   s = onPlan(s, { isWorkflow: true, steps: [{ name: 'a', agents: 2 }, 'b'], at: 0 })
   s = onSpawn(s, { agentId: 'x1', agent: 'executant-low', model: 'm', fork: false, at: 1, task: 'lire le canon' })
   s = onSpawn(s, { agentId: 'x2', agent: 'executant-low', model: 'm', fork: false, at: 1 })

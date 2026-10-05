@@ -4,10 +4,10 @@ Guide pour Claude Code quand il travaille dans ce repo.
 
 ## Ce qu'est ce repo
 
-Une **marketplace de plugins Claude Code** qui distribue trois plugins sans serveur : `roadmap`
+Une **marketplace de plugins Claude Code** qui distribue trois plugins sans serveur : `orchestration`
 (ci-dessous), `level-design` (goût et méthode de level design 3D, `CANON:15`) et
 `session-recap` (Mod de récap de session en function hooks, `CANON:23`).
-`roadmap` ne produit que des fichiers markdown dans le repo de l'utilisateur :
+`orchestration` ne produit que des fichiers markdown dans le repo de l'utilisateur :
 - `.claude/roadmap.md` : specs, milestones avec DoD, tâches à IDs stables, claims (skill `roadmap-tracker`)
 - `.claude/canon/*.md` : attentes, conventions, tests, invariants, chaque entrée avec sa provenance `[USER:<nom>]` / `[MODEL]` (skill `canon-tracker`)
 - les agents `scribe`, `orchestrateur` et l'agent principal (« default ») sont trois pairs égaux qui se parlent directement (`CANON:27`) : le scribe tient canon + roadmap ; celui qui a cadré la demande avec l'utilisateur confie un dossier de cadrage à l'agent `orchestrateur`, qui délègue chaque tâche scopée en choisissant **l'effort**, vérifie au retour et rend compte ; le scribe capture l'implicite dans le canon
@@ -17,8 +17,8 @@ Ce repo applique lui-même son plugin : **lire `.claude/canon/*.md` et `.claude/
 ## Arborescence
 
 ```
-.claude-plugin/marketplace.json     # catalogue (roadmap, level-design, session-recap)
-plugins/roadmap/
+.claude-plugin/marketplace.json     # catalogue (orchestration, level-design, session-recap)
+plugins/orchestration/
 ├── .claude-plugin/plugin.json      # version semver du plugin
 ├── agents/scribe.md                # scribe : pair, tient canon + roadmap, ne code pas, ne relaie rien
 ├── agents/orchestrator.md          # orchestrateur : pair, délègue, vérifie, rend compte à l'appelant
@@ -48,19 +48,19 @@ CHANGELOG.md
 ```sh
 python3 scripts/validate.py .                       # 0 erreur attendu ; --strict fait aussi échouer les WARN
 python3 -m unittest discover -s scripts/tests -q    # tests du validateur
-claude plugin validate . && claude plugin validate plugins/roadmap
+claude plugin validate . && claude plugin validate plugins/orchestration
 claude plugin validate plugins/session-recap && claude plugin test plugins/session-recap
 cd market-mem/mcp && python -m pytest -q            # tests d'auth (pip install -r requirements.txt pytest httpx)
 ```
 
 Smoke test d'installation, dans un HOME vierge : `claude plugin marketplace add ./` puis
-`claude plugin install roadmap@marketplace` puis `claude plugin list --json`. Aucune
+`claude plugin install orchestration@marketplace` puis `claude plugin list --json`. Aucune
 authentification n'est requise.
 
 ## Règles de travail
 
 - **Versionner à chaque changement (`CANON:9`).** Modifier un skill ou un agent de
-  `plugins/roadmap/` = augmenter `version` dans `plugins/roadmap/.claude-plugin/plugin.json`
+  `plugins/orchestration/` = augmenter `version` dans `plugins/orchestration/.claude-plugin/plugin.json`
   (patch : reformulation ; minor : nouveau comportement, agent ou skill ; major : grammaire
   canon/roadmap changée ou agent/skill retiré) **et** ajouter une entrée dans `CHANGELOG.md`.
   Un changement du catalogue augmente aussi `version` dans `.claude-plugin/marketplace.json`.

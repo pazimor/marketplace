@@ -87,7 +87,7 @@ export function effortOf(effort: unknown): Effort {
 const PLACEHOLDER_AGENT = /^(default|défaut|)$/i
 /** Le seul agent qui lance l'orchestrateur est le scribe : c'est ce qui permet de le déduire. */
 const ORCHESTRATOR = /(^|:)orchestrateur$/
-const SCRIBE = 'roadmap:scribe'
+const SCRIBE = 'orchestration:scribe'
 
 export const isScribe = (agent: string): boolean => /(^|:)scribe$/.test(agent)
 

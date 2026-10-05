@@ -112,7 +112,7 @@ Ces outils n'écrivent rien dans le projet.
 plugin. L'effort **ne se passe pas à l'appel** de l'Agent tool : il est porté par le
 frontmatter de l'agent choisi. Choisir l'exécutant, c'est choisir l'effort. Utiliser le nom
 exact que la liste des agents disponibles affiche (il peut être préfixé par le nom du
-plugin, `roadmap:executant-high`).
+plugin, `orchestration:executant-high`).
 
 **Le modèle ne se passe jamais à l'appel** (ni `model`, ni `opts.model`) : celui de chaque
 exécutant est fixé dans son fichier. **Advisor** : quand l'utilisateur a configuré un

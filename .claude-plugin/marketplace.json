@@ -5,11 +5,11 @@
     "email": "eddy.hummel@gmail.com"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a session-recap mod, for Claude Code",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "plugins": [
     {
-      "name": "roadmap",
-      "source": "./plugins/roadmap",
+      "name": "orchestration",
+      "source": "./plugins/orchestration",
       "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap; the `orchestrateur` scopes, delegates each task to an executor at the right reasoning effort, verifies on return and reports back; executors code. Each agent pins its own model in its file; an optional advisor corrects the smaller executors. No MCP server required"
     },
     {

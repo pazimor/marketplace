@@ -89,7 +89,7 @@ canon ou la roadmap au moment où elle est prise. La tâche roadmap reçoit son
 
 L'orchestrateur ne lit pas la conversation. Celui qui a cadré (toi, ou l'agent principal) l'appelle par l'Agent tool
 (`subagent_type` : l'agent `orchestrateur` de ce plugin, sous le nom exact que la liste des
-agents affiche, par exemple `roadmap:orchestrateur`), sans passer `model` : son modèle est
+agents affiche, par exemple `orchestration:orchestrateur`), sans passer `model` : son modèle est
 fixé dans son fichier. Le dossier est autonome et contient :
 
 - **Demande validée** — la reformulation acceptée, en deux ou trois phrases.

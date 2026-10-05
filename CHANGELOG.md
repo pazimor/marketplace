@@ -11,6 +11,10 @@ la version de `.claude-plugin/marketplace.json` suit à chaque changement du cat
 
 ## [Unreleased]
 
+### plugin `orchestration` 0.7.0 (ex-`roadmap` 0.6.0) — marketplace 0.11.0 — Renommé
+- Le plugin `roadmap` devient `orchestration` : dossier `plugins/orchestration/`, installation `/plugin install orchestration@marketplace`, agents `orchestration:scribe`, `orchestration:orchestrateur`, `orchestration:executant-*` (`CANON:28`). Skills (`roadmap-tracker`, `canon-tracker`) et fichiers (`.claude/roadmap.md`, `.claude/canon/`) inchangés : aucune migration des projets déjà équipés. Migration côté utilisateur : `claude plugin uninstall roadmap@marketplace` puis `claude plugin install orchestration@marketplace`.
+- `session-recap` reconnaît l'agent `orchestration:scribe`.
+
 ### marketplace 0.10.1 — Modifié
 - README : tableau des plugins avec description et commande d'installation, installation pas à pas (marketplace, plugins un par un, redémarrage, mise à jour, prérequis du mod), capture du bandeau `session-recap` à 80 colonnes (`assets/session-recap-80cols.png`, générée par `scripts/preview-session-recap.mts`). Descriptions du catalogue alignées sur les agents pairs et le nouveau bandeau.
 

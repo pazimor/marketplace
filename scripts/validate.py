@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validateur des fichiers du plugin roadmap (python3 stdlib uniquement).
+"""Validateur des fichiers du plugin orchestration (python3 stdlib uniquement).
 
 Vérifie, sous une racine de projet :
   - les manifestes `.claude-plugin/marketplace.json` et `plugins/*/.claude-plugin/plugin.json` ;

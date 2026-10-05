@@ -99,7 +99,7 @@ const workflowHtml = (() => {
   })
   const M = ['claude-haiku-4-5', 'claude-sonnet-5-5', 'claude-opus-5-5']
   const spawn = (id: string, model: string, task: string, effort: string, at: number) => {
-    r = onSpawn(r, { agentId: id, agent: 'roadmap:executant', model, fork: false, at, task })
+    r = onSpawn(r, { agentId: id, agent: 'orchestration:executant', model, fork: false, at, task })
     r = onStep(r, { agentId: id, model, effort, at })
   }
   for (const [i, t] of ['lire le canon', 'lire la roadmap', 'lire le CLAUDE.md'].entries()) {

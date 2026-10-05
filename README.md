@@ -5,7 +5,7 @@
 
   **A Claude Code plugin marketplace: keep the implicit written down — roadmap, canon, and orchestration, as plain markdown files in your repo.**
 
-  [![Plugins](https://img.shields.io/badge/plugins-roadmap%20·%20level--design%20·%20session--recap-informational)](#plugins)
+  [![Plugins](https://img.shields.io/badge/plugins-orchestration%20·%20level--design%20·%20session--recap-informational)](#plugins)
   [![Runtime](https://img.shields.io/badge/runtime-none-brightgreen)](#why)
   [![Sync](https://img.shields.io/badge/sync-git-F05032?logo=git&logoColor=white)](#why)
 
@@ -21,7 +21,7 @@ Three independent plugins, installed one by one (see [Installation](#installatio
 
 | Plugin | Kind | What it gives you | Install |
 |---|---|---|---|
-| [`roadmap`](#the-roadmap-plugin) | skills + agents | A roadmap and a canon as plain markdown files in your repo, with provenance on every entry; a `scribe` that keeps them, an `orchestrateur` that scopes and delegates, and executors per reasoning effort. | `/plugin install roadmap@marketplace` |
+| [`orchestration`](#the-orchestration-plugin) | skills + agents | A roadmap and a canon as plain markdown files in your repo, with provenance on every entry; a `scribe` that keeps them, an `orchestrateur` that scopes and delegates, and executors per reasoning effort. | `/plugin install roadmap@marketplace` |
 | [`level-design`](#level-design-plugin--3d-level-design-taste-written-down) | skills + agent | 3D level-design taste and build method, engine-agnostic, plus a reviewer that judges screenshots against your canon. | `/plugin install level-design@marketplace` |
 | [`session-recap`](#session-recap-mod--see-which-agents-run-on-what-for-how-much) | mod (function hooks) | A live band above the prompt: progress bar of the current plan, workflow phases, one card per running agent (icon by model), plus a pane with timeline, tokens and limits. | `/plugin install session-recap@marketplace` |
 
@@ -31,7 +31,7 @@ No server, no Docker, no database, no CLI. Every artefact is markdown in your re
 
 The file is the format. A server would only ever be a transport — never the other way around.
 
-## The `roadmap` plugin
+## The `orchestration` plugin
 
 Two skills and three agent roles (scribe, orchestrator, executors).
 
@@ -115,7 +115,7 @@ Requires Claude Code. Nothing else — no server, no account.
 **2. Install the plugins you want**, each one on its own:
 
 ```
-/plugin install roadmap@marketplace         # roadmap + canon + scribe / orchestrateur / executors
+/plugin install orchestration@marketplace   # roadmap + canon + scribe / orchestrateur / executors
 /plugin install level-design@marketplace    # optional: 3D level-design taste and method
 /plugin install session-recap@marketplace   # optional: the live band (mod)
 ```
@@ -128,9 +128,9 @@ From a terminal the same thing reads `claude plugin marketplace add pazimor/mark
 
 - Needs **Claude Code ≥ 2.1.287** with function hooks (mods) enabled. Check it with `claude plugin test plugins/session-recap` from a checkout: if hooks modules are turned off for your account, the command says so.
 - Nothing to configure. Optional thresholds and budgets: `claude plugin configure session-recap`.
-- Open the pane with `/session-recap`; the band above the prompt appears on its own as soon as an agent runs or a plan is declared. For the progress bar and the workflow view, install `roadmap` too — its orchestrator declares the plan and its steps through the mod's `plan` and `step` tools; without it the band still shows the running agents.
+- Open the pane with `/session-recap`; the band above the prompt appears on its own as soon as an agent runs or a plan is declared. For the progress bar and the workflow view, install `orchestration` too — its orchestrator declares the plan and its steps through the mod's `plan` and `step` tools; without it the band still shows the running agents.
 
-### First use of `roadmap`
+### First use of `orchestration`
 
 In your project, ask the agent to initialise the roadmap and the canon — it will create `.claude/roadmap.md` and `.claude/canon/*.md` with empty, honest files (it never back-fills invented history). Commit them: they are the project's memory, and `git` is the sync.
 
