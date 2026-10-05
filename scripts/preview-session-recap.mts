@@ -58,7 +58,7 @@ const band = (c: (typeof cases)[number]) => {
 }
 
 // Toutes les tailles : même plan, bandeau rendu pour 40, 80, 120 et 200 colonnes (largeur de la barre et des cartes calculées comme dans le Mod)
-const sizes = [40, 80, 120, 200].map(cols => {
+const sizeSections = [40, 80, 120, 200].map(cols => {
   const plan = scenario(3, 'running')
   const w = Math.round(cols * 7.2)
   const cw = cardWidth(cols)
@@ -66,7 +66,8 @@ const sizes = [40, 80, 120, 200].map(cols => {
   return `<section class="band" style="width:${w}px;max-width:100%"><h3>${cols} colonnes — barre ${barWidth(cols)} px, cartes ${cw}</h3>
   <div class="row" style="justify-content:center">${progressSvg(plan, barWidth(cols), NOW, 's' + cols)}</div>
   <div class="grid">${strips.slice(0, 4).map(x => `<div class="card" style="width:calc(${per}% - 4px)">${crabSvg({ body: '#d97757', animated: true, tier: tierOf(x[1]) })}<div class="txt"><div class="t">${x[2]}</div><div class="dim">${x[1]} — ${x[4]}</div></div></div>`).join('')}</div></section>`
-}).join('\n')
+})
+const sizes = sizeSections.join('\n')
 
 // Transition : l'état change à T0 ; la barre est rendue à 0, 25, 50, 75 et 100 % du fondu
 const T0 = 60_000
@@ -181,5 +182,12 @@ setInterval(()=>{i=(i+1)%F.length;t.innerHTML=F[i]},300);
 const z=document.getElementById('zoom');let zi=1;z.onclick=()=>{zi=zi%3+1;document.querySelector('main').style.zoom=zi;z.textContent='zoom ×'+zi};
 const r=document.documentElement;document.getElementById('theme').onclick=()=>{r.dataset.theme=r.dataset.theme==='light'?'dark':'light'};
 </script></body></html>`
+// Capture pour le README : le seul bandeau à 80 colonnes, sur fond sombre
+const shot = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Capture session-recap</title>
+<style>:root{--bg:#16161c;--fg:#e6e6ee;--dim:#8a8a9a;--card:#1e1e27;--line:#33333f}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;padding:20px;display:inline-block}
+${html.match(/\.band\{[^}]*\}[\s\S]*?\.card \.txt\{[^}]*\}/)![0]}
+.band{margin:0}svg{display:block}</style></head><body>${sizeSections[1]}</body></html>`
+writeFileSync(new URL('../docs/session-recap-screenshot.html', import.meta.url), shot)
 writeFileSync(new URL('../docs/session-recap-preview.html', import.meta.url), html)
 console.log('docs/session-recap-preview.html', html.length)

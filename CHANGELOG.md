@@ -11,6 +11,9 @@ la version de `.claude-plugin/marketplace.json` suit à chaque changement du cat
 
 ## [Unreleased]
 
+### marketplace 0.10.1 — Modifié
+- README : tableau des plugins avec description et commande d'installation, installation pas à pas (marketplace, plugins un par un, redémarrage, mise à jour, prérequis du mod), capture du bandeau `session-recap` à 80 colonnes (`assets/session-recap-80cols.png`, générée par `scripts/preview-session-recap.mts`). Descriptions du catalogue alignées sur les agents pairs et le nouveau bandeau.
+
 ### plugin `session-recap` 0.7.0 — marketplace 0.10.0 — Ajouté
 - Affichage d'un vrai workflow (`workflow: true` seulement) : une section par phase, « n/m agents · phase: » puis les cartes des agents de la phase (le premier titre porte aussi spinner, pourcentage et durée) ; les agents prévus mais pas encore lancés apparaissent en emplacements « agent n — à venir ». Un agent lancé avant le plan est rattaché à la phase en cours. Hors workflow, rien ne change (cartes des agents actifs).
 

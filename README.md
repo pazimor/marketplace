@@ -5,7 +5,7 @@
 
   **A Claude Code plugin marketplace: keep the implicit written down — roadmap, canon, and orchestration, as plain markdown files in your repo.**
 
-  [![Plugin](https://img.shields.io/badge/plugin-roadmap-informational)](#installation)
+  [![Plugins](https://img.shields.io/badge/plugins-roadmap%20·%20level--design%20·%20session--recap-informational)](#plugins)
   [![Runtime](https://img.shields.io/badge/runtime-none-brightgreen)](#why)
   [![Sync](https://img.shields.io/badge/sync-git-F05032?logo=git&logoColor=white)](#why)
 
@@ -15,15 +15,25 @@
 
 Everything worked out in a first pass — what you actually expect, how this module is really tested, which behaviour must never break — is agreed in the conversation and written nowhere. Change the conversation, change the agent, change the machine: it's gone, and you explain it again. **marketplace** ships the skills that make that implicit knowledge a file.
 
+## Plugins
+
+Three independent plugins, installed one by one (see [Installation](#installation)):
+
+| Plugin | Kind | What it gives you | Install |
+|---|---|---|---|
+| [`roadmap`](#the-roadmap-plugin) | skills + agents | A roadmap and a canon as plain markdown files in your repo, with provenance on every entry; a `scribe` that keeps them, an `orchestrateur` that scopes and delegates, and executors per reasoning effort. | `/plugin install roadmap@marketplace` |
+| [`level-design`](#level-design-plugin--3d-level-design-taste-written-down) | skills + agent | 3D level-design taste and build method, engine-agnostic, plus a reviewer that judges screenshots against your canon. | `/plugin install level-design@marketplace` |
+| [`session-recap`](#session-recap-mod--see-which-agents-run-on-what-for-how-much) | mod (function hooks) | A live band above the prompt: progress bar of the current plan, workflow phases, one card per running agent (icon by model), plus a pane with timeline, tokens and limits. | `/plugin install session-recap@marketplace` |
+
 ## Why
 
 No server, no Docker, no database, no CLI. Every artefact is markdown in your repo (`.claude/roadmap.md`, `.claude/canon/`), read by the agent before it acts and written by the agent when it closes a task. Machine-to-machine sync is `git pull`; team review is a diff.
 
 The file is the format. A server would only ever be a transport — never the other way around.
 
-## The three pillars
+## The `roadmap` plugin
 
-One plugin (`roadmap`), two skills and one agent.
+Two skills and three agent roles (scribe, orchestrator, executors).
 
 ### `roadmap-tracker` — the plan as a file
 
@@ -78,26 +88,51 @@ Engine-agnostic: engine and asset-pack specifics belong in your project's canon.
 
 ### `session-recap` (mod) — see which agents run, on what, for how much
 
-A third plugin, built on Claude Code's function hooks (mods). It answers "which agent started this session, which subagents did each prompt create, resume or fork, on which model and effort, and what did they cost?":
+A plugin built on Claude Code's function hooks (mods). It answers "what is the plan doing, which agents are running on what, which model and effort, and what did it cost?" — live, above your prompt:
 
-- **`/session-recap`** opens a pane: the starting agent with its model and effort, the 5-hour / 7-day limits with a linear forecast, a per-prompt timeline (new, resumed, forked, still running), the agent tree, and tokens (input, output, cache read, cache write) by agent × model × effort.
-- A one-line band above the prompt keeps the essentials in view.
-- Toasts warn at limit thresholds (80 % / 95 % by default), on per-agent and per-session token budgets, when a subagent answers on another model than the one it was spawned on, and when the main agent takes more than a set share of the session.
+![session-recap band at 80 columns: phase badge on the progress bar, one card per running agent](assets/session-recap-80cols.png)
 
-Read-only: every hook passes the event on unchanged. Thresholds are plugin options (`claude plugin configure session-recap`). Tested on Claude Code 2.1.287; the mods API is early access and may change between releases. Note that a `CLAUDE_CODE_EFFORT_LEVEL` environment variable overrides both the session effort and every agent's `effort` — the recap shows the effort that actually applies.
+*The band at 80 columns (progress bar 532 px, agent cards 2 per row) — rendered by the mod's own code, see `docs/session-recap-preview.html` for every state and size.*
+
+- **Progress bar.** Declared by the orchestrator through the `plan` / `step` tools: a rounded track filled with small animated cells, a badge for the current phase at its start, percentage, steps done, agents done and elapsed time. The colour follows the state — running, waiting for you, error, done — and fades from one to the next.
+- **Agent cards.** One small card per active sub-agent: its task, model · effort, current tool and clock. The icon is a pixel-art mascot that evolves with the model tier (bare crab → crown → crowned with accessories) and turns black-and-white once the agent is idle. Cards go 3, 2 or 1 per row depending on the width; the bar uses the whole line.
+- **Real workflows.** For a real workflow (`workflow: true`) the band lists each phase with its `n/m agents` and its agents, with placeholder cards for the agents not summoned yet.
+- **`/session-recap`** opens a pane: the 5-hour / 7-day limits with a linear forecast, a per-prompt timeline (new, resumed, forked, still running), the agent tree, and tokens by agent × model × effort.
+- **Toasts** warn at limit thresholds (80 % / 95 % by default), on per-agent and per-session token budgets, when a sub-agent answers on another model than the one it was spawned on, and when the main agent takes more than a share of the session. `/progress` hides or shows the bars, `/progress-clear` drops the current plan.
+
+Read-only: every hook passes the event on unchanged. Thresholds are plugin options (`claude plugin configure session-recap`). Tested on Claude Code 2.1.287; the mods API is early access and may change between releases.
 
 ## Installation
 
-Requires Claude Code. Nothing else.
+Requires Claude Code. Nothing else — no server, no account.
+
+**1. Add the marketplace** (once per machine):
 
 ```
 /plugin marketplace add pazimor/marketplace
-/plugin install roadmap@marketplace
-/plugin install level-design@marketplace   # optional, for 3D level design
-/plugin install session-recap@marketplace  # optional, session recap mod (Claude Code ≥ 2.1.287)
 ```
 
-Then, in your project, ask the agent to initialise the roadmap and the canon — it will create `.claude/roadmap.md` and `.claude/canon/*.md` with empty, honest files (it never back-fills invented history). Commit them: that's the sync mechanism.
+**2. Install the plugins you want**, each one on its own:
+
+```
+/plugin install roadmap@marketplace         # roadmap + canon + scribe / orchestrateur / executors
+/plugin install level-design@marketplace    # optional: 3D level-design taste and method
+/plugin install session-recap@marketplace   # optional: the live band (mod)
+```
+
+**3. Restart Claude Code** so the new agents, skills and mod are loaded.
+
+From a terminal the same thing reads `claude plugin marketplace add pazimor/marketplace` then `claude plugin install <name>@marketplace`. To try a local checkout instead, use `claude plugin marketplace add ./` from the repo root. To update later: `claude plugin marketplace update marketplace` then `claude plugin update <name>@marketplace`.
+
+### The mod (`session-recap`)
+
+- Needs **Claude Code ≥ 2.1.287** with function hooks (mods) enabled. Check it with `claude plugin test plugins/session-recap` from a checkout: if hooks modules are turned off for your account, the command says so.
+- Nothing to configure. Optional thresholds and budgets: `claude plugin configure session-recap`.
+- Open the pane with `/session-recap`; the band above the prompt appears on its own as soon as an agent runs or a plan is declared. For the progress bar and the workflow view, install `roadmap` too — its orchestrator declares the plan and its steps through the mod's `plan` and `step` tools; without it the band still shows the running agents.
+
+### First use of `roadmap`
+
+In your project, ask the agent to initialise the roadmap and the canon — it will create `.claude/roadmap.md` and `.claude/canon/*.md` with empty, honest files (it never back-fills invented history). Commit them: they are the project's memory, and `git` is the sync.
 
 The skills trigger on their own — talk about a milestone, a task, a convention, a test command, or ask for a feature, and the right one loads.
 
