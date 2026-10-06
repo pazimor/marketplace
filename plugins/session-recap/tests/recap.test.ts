@@ -278,6 +278,21 @@ test('carrés fixes : 5 rangées, fondu statique gauche→droite, onde de couleu
   expect(front).toBeGreaterThan(back)
 })
 
+test('bureau : source SVG identique d\u2019un tic à l\u2019autre (le cadre isolé se recharge sinon), fond transparent', () => {
+  let s = onPlan(emptyRecap(), { title: 'L', stages: [{ name: 'Lire', steps: ['a', 'b'] }], at: 0 })
+  s = onPlanStep(s, { step: 'a', status: 'done', at: 5000 })
+  expect(progressSvg(s.plan!, 300, 9000)).toBe(progressSvg(s.plan!, 300, 9250))
+  expect(progressSvg(s.plan!, 300, 9000)).toBe(progressSvg(s.plan!, 300, 61000))
+  expect(progressSvg(s.plan!, 300, 9000)).toContain('color-scheme:light dark')
+  expect(crabSvg()).toContain('color-scheme:light dark')
+  // fondu d'état : animation CSS, même source pendant tout le fondu, retirée ensuite
+  const w = onPlanStep(s, { state: 'input', note: 'x', at: 10000 })
+  const during = progressSvg(w.plan!, 300, 10000)
+  expect(during).toContain('@keyframes')
+  expect(progressSvg(w.plan!, 300, 10000 + STATE_FADE_MS / 2)).toBe(during)
+  expect(progressSvg(w.plan!, 300, 10000 + STATE_FADE_MS)).not.toContain('@keyframes')
+})
+
 test('mascotte : SVG pixel-art, animée seulement si demandé', () => {
   expect(crabSvg()).toContain('viewBox')
   expect(crabSvg()).not.toContain('animateTransform')

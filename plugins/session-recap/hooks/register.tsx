@@ -26,6 +26,10 @@ import {
   progressCells,
   progressSvg,
   crabSvg,
+  crabWidth,
+  CRAB_HEIGHT,
+  progressWidth,
+  PROGRESS_HEIGHT,
   barWidth,
   isFading,
   workflowStages,
@@ -427,6 +431,8 @@ export const register: Register = (on, options) => {
               <Box key="plan-bar-container" display="flex" justifyContent="center" width="100%">
                 <els.Svg
                   source={progressSvg(plan, barWidth(e.props.bodyColumns), now)}
+                  width={progressWidth(barWidth(e.props.bodyColumns))}
+                  height={PROGRESS_HEIGHT}
                   alt={`${plan.title || 'plan'} : ${prog.percent} %`}
                   isInteractive
                 />
@@ -474,6 +480,8 @@ export const register: Register = (on, options) => {
                 key={`crab-${r.id}`}
                 source={crabSvg({ body: crabBody, animated: r.status === 'running', tier: tierOf(r.model), mono: r.status === 'done' })}
                 alt={`agent ${tierOf(r.model)}`}
+                width={crabWidth()}
+                height={CRAB_HEIGHT}
                 isInteractive
               />
             )}
@@ -494,7 +502,7 @@ export const register: Register = (on, options) => {
         {isTerminal ? (
           <Text dimColor>◌ </Text>
         ) : (
-          <els.Svg source={crabSvg({ mono: true })} alt="agent à venir" isInteractive />
+          <els.Svg source={crabSvg({ mono: true })} alt="agent à venir" width={crabWidth()} height={CRAB_HEIGHT} isInteractive />
         )}
         <Box flexDirection="column" paddingLeft={1}>
           <Text dimColor wrap="truncate-end">agent {n} — à venir</Text>

@@ -704,6 +704,15 @@ const level = (c: number, row: number): number => LEVELS[PATTERN[row % ROWS]![((
 const COL_PX = 7
 /** Largeur de la barre : toute la ligne disponible (moins une marge), de 160 px à 1600 px. */
 export const barWidth = (bodyColumns: number): number => Math.min(1600, Math.max(160, Math.floor((bodyColumns - 4) * COL_PX)))
+/** Hauteur en px de la barre SVG (la pastille dépasse la piste). */
+export const PROGRESS_HEIGHT = TRACK_H + TRACK_Y * 2
+/** Largeur en px de la barre SVG pour une largeur demandée. */
+export const progressWidth = (width: number): number => Math.max(120, Math.floor(width))
+/**
+ * Style de la racine des SVG du bureau : sans `color-scheme`, le cadre isolé (`isInteractive`) d'un document
+ * en thème sombre prend un fond opaque blanc ; le fond reste transparent.
+ */
+const SVG_ROOT_STYLE = 'color-scheme:light dark;background:transparent'
 /** Largeur d'une carte d'agent selon la place : 1, 2 ou 3 par ligne. */
 export const cardWidth = (bodyColumns: number): '100%' | '50%' | '33%' => (bodyColumns < 64 ? '100%' : bodyColumns < 104 ? '50%' : '33%')
 /** Géométrie de la barre, lue par scripts/measure-session-recap.mts : à garder synchrone avec progressSvg. */
@@ -722,11 +731,15 @@ export const PROGRESS_GEOMETRY = { cell: SQ, pitch: SQ + GAP, rows: ROWS, trackY
 export function progressSvg(plan: Plan, width: number, now: number, uid = ''): string {
   const p = planProgress(plan)
   const pitch = SQ + GAP
-  const H = TRACK_H + TRACK_Y * 2 // 28, la pastille (24 px) dépasse la piste
+  const H = PROGRESS_HEIGHT // 28, la pastille (24 px) dépasse la piste
   const R = TRACK_H / 2 // arrondi de la piste et du remplissage : pilule
-  const W = Math.max(120, Math.floor(width))
+  const W = progressWidth(width)
   const live = plan.endedAt === undefined && plan.state === 'running'
-  const hex = stateHex(plan, now)
+  // couleurs finales dans le balisage ; le fondu d'état est une animation CSS posée tant qu'il dure, pour que
+  // la source reste identique d'un tic à l'autre (le cadre isolé du bureau se recharge à chaque changement de source)
+  const hex = STATE_HEX[plan.state]
+  const fading = plan.prevState !== undefined && plan.prevState !== plan.state && isFading(plan, now)
+  const prevHex = plan.prevState !== undefined ? STATE_HEX[plan.prevState] : hex
   const n = plan.steps.length
   // pastille : calculée d'abord, le fondu s'arrête à son bord gauche
   const label = p.stage.length > 12 ? `${p.stage.slice(0, 11)}…` : p.stage
@@ -802,7 +815,13 @@ export function progressSvg(plan: Plan, width: number, now: number, uid = ''): s
   // forme du remplissage : pilule à gauche, bord droit droit contre la pastille (calotte seule si très court)
   const fillShape = `<rect x="0" y="${TRACK_Y}" width="${clipW}" height="${TRACK_H}" rx="${R}"/>`
   const parts: string[] = []
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`)
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${SVG_ROOT_STYLE}">`)
+  if (fading) {
+    const fade = (name: string, from: string, to: string) =>
+      `@keyframes ${name}${uid}{from{fill:${from}}}[fill="${to}"]{animation:${name}${uid} ${STATE_FADE_MS}ms ease-in-out both}`
+    // la pastille (hex) et les cellules (light, sparkHex) ont des teintes distinctes : un sélecteur par teinte
+    parts.push(`<style>${fade('h', prevHex, hex)}${fade('l', mix(prevHex, '#ffffff', 0.55), light)}${fade('s', mix(prevHex, '#ffffff', 0.7), sparkHex)}</style>`)
+  }
   parts.push(
     `<defs><clipPath id="c${uid}">${fillShape}</clipPath>` +
       // fondu statique : minimum à gauche (début), plein à droite contre la pastille ; l'onde y naît et s'estompe en reculant
@@ -836,7 +855,7 @@ export function progressSvg(plan: Plan, width: number, now: number, uid = ''): s
     const textColor = br * 0.299 + bg * 0.587 + bb * 0.114 > 130 ? '#16161a' : '#ffffff'
     parts.push(
       `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="${ph / 2}" fill="${hex}"/>` +
-        `<text x="${px + pw / 2}" y="${py + ph / 2 + 4.2}" font-size="12" font-weight="700" fill="${textColor}" text-anchor="middle" font-family="system-ui,sans-serif">${esc(label)}<title>${esc(`${plan.title || 'plan'} · ${duration((plan.endedAt ?? now) - plan.startedAt)}`)}</title></text>`,
+        `<text x="${px + pw / 2}" y="${py + ph / 2 + 4.2}" font-size="12" font-weight="700" fill="${textColor}" text-anchor="middle" font-family="system-ui,sans-serif">${esc(label)}<title>${esc(plan.endedAt !== undefined ? `${plan.title || 'plan'} · ${duration(plan.endedAt - plan.startedAt)}` : plan.title || 'plan')}</title></text>`,
     )
   }
   parts.push('</svg>')
@@ -900,6 +919,10 @@ export function progressCells(plan: Plan, columns: number, frame: number, now?: 
 
 // --- Mascotte (SVG pixel-art) -----------------------------------------------------------------
 
+/** Hauteur par défaut et largeur en px de la mascotte (grille 13 × 12,5). */
+export const CRAB_HEIGHT = 30
+export const crabWidth = (h = CRAB_HEIGHT): number => Math.round((h * 13) / 12.5)
+
 export type Tier = 'haiku' | 'sonnet' | 'opus' | 'fable'
 /** Rang d'un modèle d'après son identifiant ; inconnu : le plus simple. */
 export function tierOf(id: string): Tier {
@@ -915,7 +938,7 @@ export const TIER_EMOJI: Record<Tier, string> = { haiku: '🦐', sonnet: '🦀',
  * les yeux et accessoire doré dans les pinces ; opus : couronne ; fable : grande couronne à gemme, accessoire et étincelles.
  */
 export function crabSvg(o: { height?: number; body?: string; eye?: string; animated?: boolean; tier?: Tier; mono?: boolean } = {}): string {
-  const h = o.height ?? 30
+  const h = o.height ?? CRAB_HEIGHT
   const mono = o.mono === true // inactif : noir et blanc, accessoires compris
   const body = mono ? '#9a9a9a' : (o.body ?? '#d97757')
   const eye = o.eye ?? '#1b1b1f'
@@ -953,5 +976,5 @@ export function crabSvg(o: { height?: number; body?: string; eye?: string; anima
   const bob = o.animated
     ? `<animateTransform attributeName="transform" type="translate" values="0 0;0 -0.5;0 0" dur="0.7s" repeatCount="indefinite"/>`
     : ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round((h * 13) / 12.5)}" height="${h}" viewBox="0 -0.5 13 12.5" shape-rendering="crispEdges"><g>${bob}${parts.join('')}</g></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${crabWidth(h)}" height="${h}" style="${SVG_ROOT_STYLE}" viewBox="0 -0.5 13 12.5" shape-rendering="crispEdges"><g>${bob}${parts.join('')}</g></svg>`
 }

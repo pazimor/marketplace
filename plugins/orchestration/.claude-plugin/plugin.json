@@ -1,6 +1,6 @@
 {
   "name": "orchestration",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Roadmap + canon fichiers pour Claude Code — specs canon, milestones avec DoD, tâches à IDs stables et claims (.claude/roadmap.md), canon avec provenance [USER]/[MODEL] (.claude/canon/), l'agent scribe (il tient canon + roadmap), l'agent orchestrateur (il délègue, vérifie et rend compte, sans coder), trois pairs égaux avec l'agent principal et ses exécutants par niveau d'effort, chacun avec son modèle fixé dans son propre fichier. Sans serveur MCP : portable via git.",
   "author": {
     "name": "eddy-hummel",

@@ -65,9 +65,10 @@ authentification n'est requise.
   canon/roadmap changée ou agent/skill retiré) **et** ajouter une entrée dans `CHANGELOG.md`.
   Un changement du catalogue augmente aussi `version` dans `.claude-plugin/marketplace.json`.
   Lancer `python3 scripts/validate.py .` avant de commiter.
-- **Modèles (`CANON:22`).** Un modèle ne se nomme que sur la ligne `model:` du frontmatter
-  de l'agent — jamais dans le texte des agents, skills, manifestes, README ou ce fichier.
-  La gamme la plus coûteuse est interdite ; `validate.py` refuse les deux écarts.
+- **Modèles (`CANON:30`).** Les agents d'`orchestration` n'ont pas de `model` : scribe et
+  orchestrateur héritent du modèle de la session, l'orchestrateur passe celui de chaque exécutant à l'appel. Un modèle ne se nomme que sur la ligne `model:` du frontmatter
+  d'un agent — jamais dans le texte des agents, skills, manifestes, README ou ce fichier
+  (`validate.py` le refuse).
 - **Rester générique (`CANON:8`).** Aucun projet ni outil particulier (Unity, prefab…) dans
   les agents et skills distribués : ces détails vivent dans le canon du projet utilisateur.
 - **Les grammaires appartiennent aux SKILL.md (`CANON:3`).** Si une règle de grammaire change,

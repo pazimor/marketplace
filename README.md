@@ -61,18 +61,17 @@ Nothing is deleted: an entry that goes stale is struck through with its date and
 
 ### `scribe` + `orchestrateur` (agents) — equal peers beside your main agent, executors code
 
-A workflow, made explicit, split in three roles so the expensive model only works where it pays off. The main agent (the default one you talk to), the scribe and the orchestrator are **equals**: none is the entry point, and each can message the others directly (short messages that point to IDs and paths, never copies). **No role above the executors ever writes code.**
+A workflow, made explicit, split in three roles. The main agent (the default one you talk to), the scribe and the orchestrator are **equals**: none is the entry point, and each can message the others directly (short messages that point to IDs and paths, never copies). **No role above the executors ever writes code.**
 
 - **`scribe` — the pen.** It keeps the canon and the roadmap: whoever talks with you sends it the decisions to write down, the orchestrator sends it its findings, and at closure it runs the capture ritual — what implicit thing was settled, and what got stuck in the orchestration itself — and only then ticks the box. It is not a relay, so its context doesn't fill up with copies.
 - **`orchestrateur` — delegation and verification.** It splits the scoping file into tasks that each carry an objective, a file perimeter, an executable success criterion and an explicit out-of-scope list, delegates each one choosing the **reasoning effort** by the nature of the work, writes the multi-agent workflow when you explicitly asked for one, and runs every success criterion itself — a delegated agent's report is a claim, not proof. It reports back to whoever called it and sends its findings to the scribe; it never talks to you directly.
 - **`executant-low` … `executant-max` — the executors.** Effort can't be passed on a plain subagent call, so the five executors differ only by `effort`: picking the executor picks the effort.
 
-Each agent pins its model in its own frontmatter — the only place a model is ever named. The scribe runs on an economical model, the orchestrator on the most capable allowed one, the executors on a smaller one; the most expensive family is refused by the validator. The orchestrator never passes a model on a call.
+No agent pins a model. The scribe and the orchestrator inherit your session's model; the orchestrator picks a model for each executor on the call — independently of effort, cheapest for mechanical work, most capable for review and hard problems — among the models your settings allow (restrict them with a permission rule such as `Agent(model:…)` in `deny`).
 
 Setup, once per machine:
 
-- nothing to configure: start the session with your usual main agent — the scribe and the orchestrator are summoned as peers when needed;
-- optionally, run `/advisor` and pick the orchestrator's model: executors on a smaller model then consult it on their own mid-task.
+- nothing to configure: start the session with your usual main agent — the scribe and the orchestrator are summoned as peers when needed.
 
 Before any delegation both agents pass a mandatory read gate over the canon and the roadmap — project specifics (tools, commands, files never to touch) come from there, the agents themselves stay generic.
 

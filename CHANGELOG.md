@@ -11,6 +11,14 @@ la version de `.claude-plugin/marketplace.json` suit à chaque changement du cat
 
 ## [Unreleased]
 
+### plugin `orchestration` 0.8.0 — Modifié
+- Les agents (`scribe`, `orchestrateur`, `executant-*`) n'ont plus de `model` (`CANON:30`, remplace `CANON:22`). Scribe et orchestrateur héritent du modèle de la session ; l'orchestrateur choisit et passe le modèle de chaque exécutant à l'appel (`model`, `opts.model` en workflow), indépendamment de l'effort, avec des repères par nature de tâche et une redélégation un cran en dessous si un modèle est refusé par les réglages. L'exclusion de la gamme la plus coûteuse passe dans les réglages utilisateur ; on ne compte plus sur l'advisor. Les exécutants ne diffèrent toujours que par `effort`.
+- `validate.py` : retrait de `frontmatter.model-forbidden` et `frontmatter.model-missing` ; `plugin.model-mention` reste.
+- Orchestrateur à durée de vie bornée : un dossier = un appel, terminé par le rapport ; un nouveau lot va à un nouvel orchestrateur (description, scribe). Exécutants toujours au premier plan (`run_in_background: false`) pour que leurs rapports reviennent à l'orchestrateur au lieu d'être relayés par l'agent principal, et jamais de fin de tour avec un exécutant en cours. Dossier trop gros : arrêt au dernier jalon vérifié et relance sur un orchestrateur neuf. Constaté : un orchestrateur gardé 22 h, 203 messages relayés, contexte à 921k, ~387M tokens d'entrée cumulés.
+
+### plugin `session-recap` 0.7.1 — Corrigé
+- Bandeau sur le bureau : la barre et les mascottes avaient la taille par défaut d'un cadre (300 × 150) sur fond blanc et scintillaient. Taille explicite passée à `Svg` (`progressWidth` / `PROGRESS_HEIGHT`, `crabWidth` / `CRAB_HEIGHT`) ; `color-scheme: light dark` à la racine des SVG pour un fond transparent ; source SVG identique d'un tic à l'autre : l'infobulle de la pastille ne porte plus de durée qui avance, et le fondu d'état est une animation CSS posée le temps du fondu au lieu d'une couleur recalculée à chaque tic (le cadre isolé se rechargeait à chaque changement de source).
+
 ### plugin `orchestration` 0.7.0 (ex-`roadmap` 0.6.0) — marketplace 0.11.0 — Renommé
 - Le plugin `roadmap` devient `orchestration` : dossier `plugins/orchestration/`, installation `/plugin install orchestration@marketplace`, agents `orchestration:scribe`, `orchestration:orchestrateur`, `orchestration:executant-*` (`CANON:28`). Skills (`roadmap-tracker`, `canon-tracker`) et fichiers (`.claude/roadmap.md`, `.claude/canon/`) inchangés : aucune migration des projets déjà équipés. Migration côté utilisateur : `claude plugin uninstall roadmap@marketplace` puis `claude plugin install orchestration@marketplace`.
 - `session-recap` reconnaît l'agent `orchestration:scribe`.
