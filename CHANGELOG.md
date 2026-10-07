@@ -11,6 +11,9 @@ la version de `.claude-plugin/marketplace.json` suit à chaque changement du cat
 
 ## [Unreleased]
 
+### plugin `session-recap` 0.7.2 — Corrigé
+- Bureau : barre et mascottes dessinées en image (`Svg` sans `isInteractive`). Le cadre isolé était recréé à chaque rendu du bandeau malgré une source identique : flash de fond blanc, scintillement et animation du crabe relancée. Le tic du bandeau passe à 1 s hors terminal (les SVG s'animent d'eux-mêmes) et le texte n'y porte plus de spinner. Les infobulles `<title>` par étape de la barre ne s'affichent plus ; la carte au survol du bandeau donne toujours étapes et durées.
+
 ### plugin `orchestration` 0.8.0 — Modifié
 - Les agents (`scribe`, `orchestrateur`, `executant-*`) n'ont plus de `model` (`CANON:30`, remplace `CANON:22`). Scribe et orchestrateur héritent du modèle de la session ; l'orchestrateur choisit et passe le modèle de chaque exécutant à l'appel (`model`, `opts.model` en workflow), indépendamment de l'effort, avec des repères par nature de tâche et une redélégation un cran en dessous si un modèle est refusé par les réglages. L'exclusion de la gamme la plus coûteuse passe dans les réglages utilisateur ; on ne compte plus sur l'advisor. Les exécutants ne diffèrent toujours que par `effort`.
 - `validate.py` : retrait de `frontmatter.model-forbidden` et `frontmatter.model-missing` ; `plugin.model-mention` reste.

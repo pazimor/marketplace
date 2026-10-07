@@ -131,8 +131,9 @@ export const register: Register = (on, options) => {
         },
       })
       .catch(() => undefined)
-    // Le bandeau s'anime (et les horloges avancent) tant qu'un plan ou un sous-agent est actif.
-    void $.clock.every(250, async () => {
+    // Le bandeau s'anime (et les horloges avancent) tant qu'un plan ou un sous-agent est actif. Hors terminal,
+    // les SVG s'animent d'eux-mêmes : le tic ne sert qu'aux horloges, une fois par seconde.
+    void $.clock.every(e.surface === 'terminal' ? 250 : 1000, async () => {
       const cur = await read($, recap)
       if (isPlanLive(cur) || isFading(cur.plan, await $.clock.now()) || Object.values(cur.runs).some(r => r.id !== MAIN && r.status === 'running'))
         await update($, tick, n => n + 1)
@@ -405,7 +406,7 @@ export const register: Register = (on, options) => {
     const color = plan === null ? undefined : isTerminal ? stateColor[plan.state] : stateHex(plan, now) // desktop : le texte suit le fondu
     const elapsed = plan !== null ? duration((plan.endedAt ?? now) - plan.startedAt) : ''
     const spin =
-      plan === null ? '' : live && plan.state === 'running' ? SPINNER[frame % SPINNER.length]! : plan.state === 'input' ? '?' : plan.state === 'error' ? '✗' : '✓'
+      plan === null ? '' : live && plan.state === 'running' ? (isTerminal ? SPINNER[frame % SPINNER.length]! : '●') : plan.state === 'input' ? '?' : plan.state === 'error' ? '✗' : '✓'
 
     const identity = (
       <Box key="identity" flexDirection="column" alignItems="center" justifyContent="center">
@@ -430,11 +431,11 @@ export const register: Register = (on, options) => {
             ) : (
               <Box key="plan-bar-container" display="flex" justifyContent="center" width="100%">
                 <els.Svg
+                  key="plan-bar-svg"
                   source={progressSvg(plan, barWidth(e.props.bodyColumns), now)}
                   width={progressWidth(barWidth(e.props.bodyColumns))}
                   height={PROGRESS_HEIGHT}
                   alt={`${plan.title || 'plan'} : ${prog.percent} %`}
-                  isInteractive
                 />
               </Box>
             )}
@@ -472,7 +473,7 @@ export const register: Register = (on, options) => {
       const tint = r.status === 'failed' ? 'red' : undefined
       return (
         <Box key={`strip-${r.id}`} width={cardWidth(e.props.bodyColumns)} borderStyle="round" paddingX={1}>
-          <Box>
+          <Box key={`strip-body-${r.id}`}>
             {isTerminal ? (
               <Text color={tint} dimColor={r.status === 'done'}>{TIER_EMOJI[tierOf(r.model)]} </Text>
             ) : (
@@ -482,7 +483,6 @@ export const register: Register = (on, options) => {
                 alt={`agent ${tierOf(r.model)}`}
                 width={crabWidth()}
                 height={CRAB_HEIGHT}
-                isInteractive
               />
             )}
             <Box flexDirection="column" paddingLeft={1}>
@@ -502,7 +502,7 @@ export const register: Register = (on, options) => {
         {isTerminal ? (
           <Text dimColor>◌ </Text>
         ) : (
-          <els.Svg source={crabSvg({ mono: true })} alt="agent à venir" width={crabWidth()} height={CRAB_HEIGHT} isInteractive />
+          <els.Svg key={`${key}-crab`} source={crabSvg({ mono: true })} alt="agent à venir" width={crabWidth()} height={CRAB_HEIGHT} />
         )}
         <Box flexDirection="column" paddingLeft={1}>
           <Text dimColor wrap="truncate-end">agent {n} — à venir</Text>

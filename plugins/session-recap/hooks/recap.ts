@@ -709,8 +709,8 @@ export const PROGRESS_HEIGHT = TRACK_H + TRACK_Y * 2
 /** Largeur en px de la barre SVG pour une largeur demandée. */
 export const progressWidth = (width: number): number => Math.max(120, Math.floor(width))
 /**
- * Style de la racine des SVG du bureau : sans `color-scheme`, le cadre isolé (`isInteractive`) d'un document
- * en thème sombre prend un fond opaque blanc ; le fond reste transparent.
+ * Style de la racine des SVG du bureau, fond transparent. Les SVG sont dessinés en image, jamais en cadre isolé
+ * (`isInteractive`) : le cadre, recréé à chaque rendu du bandeau, flashait en blanc et relançait les animations.
  */
 const SVG_ROOT_STYLE = 'color-scheme:light dark;background:transparent'
 /** Largeur d'une carte d'agent selon la place : 1, 2 ou 3 par ligne. */
@@ -724,7 +724,7 @@ export const PROGRESS_GEOMETRY = { cell: SQ, pitch: SQ + GAP, rows: ROWS, trackY
  * au plein à droite (contre la pastille), quelques cellules fixes étincellent ; tant que le plan tourne, une
  * onde de couleurs plus ou moins claires naît contre la pastille et recule vers la gauche (SMIL), en
  * s'estompant avec le fondu. Les cellules ne bougent jamais, seule la couleur bouge.
- * Aucune graduation. Une zone de survol par étape (infobulle : nom et durée). La pastille de phase
+ * Aucune graduation. Une zone par étape avec `<title>` (infobulle, seulement là où le SVG est interactif). La pastille de phase
  * est unie, collée à l'avant du remplissage, qui s'arrête net à son bord gauche (rien dessous ni dans ses coins).
  * `uid` suffixe les ids quand plusieurs barres partagent un même document (page de test).
  */
