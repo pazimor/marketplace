@@ -89,7 +89,7 @@ Engine-agnostic: engine and asset-pack specifics belong in your project's canon.
 
 A plugin built on Claude Code's function hooks (mods). It answers "what is the plan doing, which agents are running on what, which model and effort, and what did it cost?" — live, above your prompt:
 
-![session-recap band at 80 columns: phase badge on the progress bar, one card per running agent](assets/session-recap-80cols.png)
+![session-recap band at 80 columns: phase badge on the progress bar, one card per running agent](assets/session-recap.png)
 
 *The band at 80 columns (progress bar 532 px, agent cards 2 per row) — rendered by the mod's own code, see `docs/session-recap-preview.html` for every state and size.*
 
