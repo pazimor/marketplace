@@ -4,9 +4,9 @@ description: >-
   Executor for a scoped task brief, reasoning effort "max" — last resort, after a failed xhigh attempt or when an error would be very costly.
   Called by the orchestrator agent (which chooses the effort and the model), never directly
   by the user: do not select this agent on your own initiative.
-# No `model`: the orchestrator passes it at call time, otherwise it inherits from its caller (CANON:35).
+# No `model`: the orchestrator passes it at call time, otherwise it inherits from its caller (CANON:22).
 effort: max
-# Built-in tools useless to an executor: they weigh down the prefix of every launch (CANON:34).
+# Built-in tools useless to an executor: they weigh down the prefix of every launch (CANON:21).
 disallowedTools: Agent, Artifact, SendUserFile, SuggestPluginInstall, SuggestSkills, SearchPlugins
 ---
 

@@ -89,7 +89,7 @@ export function onSessionStart(
   s: Recap,
   e: { surface: string | null; agent: string | undefined; model: string; at: number },
 ): Recap {
-  // never inferred: the main agent, the scribe and the orchestrator are three peers (CANON:27)
+  // never inferred: the main agent, the scribe and the orchestrator are three peers (CANON:17)
   const startAgent = e.agent !== undefined && !PLACEHOLDER_AGENT.test(e.agent) ? e.agent : 'default'
   const main: AgentRun = s.runs[MAIN] ?? {
     id: MAIN,
@@ -376,7 +376,7 @@ export function childrenOf(s: Recap, id: string): AgentRun[] {
   return s.order.map(i => s.runs[i]!).filter(r => r.parentId === id)
 }
 
-/** The peers of the main agent (CANON:27): launched by it, they still sit at its level. */
+/** The peers of the main agent (CANON:17): launched by it, they still sit at its level. */
 const PEER = /(^|:)(scribe|orchestrator)$/
 export const isPeer = (agent: string): boolean => PEER.test(agent)
 

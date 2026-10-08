@@ -11,7 +11,7 @@ Each missing part is skipped: the script runs as well on this marketplace as on 
 uses the plugin (canon + roadmap only).
 
 The grammar checked here is described in `docs/grammar.md`, which itself points to the SKILL.md files
-(`canon-tracker`, `roadmap-tracker`), the only owners of the grammar (CANON:3).
+(`canon-tracker`, `roadmap-tracker`), the only owners of the grammar (CANON:2).
 
 Usage: python3 scripts/validate.py [ROOT] [--strict]
 Exit code: 0 = no error, 1 = error(s) (or warning(s) with --strict), 2 = usage.
@@ -102,7 +102,7 @@ def read_text(report: Report, path: Path) -> str | None:
 
 
 def load_json(report: Report, path: Path):
-    # CANON:4 — same check as `python3 -c "import json; json.load(open(p))"`.
+    # CANON:3 — same check as `python3 -c "import json; json.load(open(p))"`.
     text = read_text(report, path)
     if text is None:
         return None
@@ -215,7 +215,7 @@ def check_manifests(report: Report, root: Path) -> None:
 
 MODEL_ALIASES = {"opus", "sonnet", "haiku", "fable", "inherit"}
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
-# Model names appear only on the `model:` line of an agent's frontmatter (`CANON:35`).
+# Model names appear only on the `model:` line of an agent's frontmatter (`CANON:22`).
 MODEL_NAME_RE = re.compile(r"\b(opus|sonnet|haiku|fable)\b", re.IGNORECASE)
 PLUGIN_AGENT_IGNORED = ("hooks", "mcpServers", "permissionMode")
 # Mascots of the agents-info band (`MASCOTS` in plugins/agents-info/hooks/recap.ts); Claude Code ignores the field.
@@ -343,7 +343,7 @@ def check_model_mentions(report: Report, root: Path) -> None:
             m = MODEL_NAME_RE.search(line)
             if m:
                 report.error("plugin.model-mention", path, n,
-                             f"model name outside an agent's frontmatter: {m.group(0)!r} (`CANON:35`)")
+                             f"model name outside an agent's frontmatter: {m.group(0)!r} (`CANON:22`)")
 
 
 # ---------------------------------------------------------------------------------------------

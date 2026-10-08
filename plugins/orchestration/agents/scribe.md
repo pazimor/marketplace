@@ -8,12 +8,12 @@ description: >-
   note a decision, read or update the canon and the roadmap, or capture what is implicit in a
   pass — never as a mandatory relay for a request. Called without `model`: its frontmatter
   sets its own.
-# The only agent in the plugin that fixes its own model: the most economical model is enough to keep the canon and the roadmap (CANON:35).
+# The only agent in the plugin that fixes its own model: the most economical model is enough to keep the canon and the roadmap (CANON:22).
 model: haiku
 effort: xhigh
 # Mascot of the agents-info band (ignored by Claude Code, and without the Mod).
 mascot: scribe
-# Built-in tools the scribe does not need: they weigh down the prefix of every launch (CANON:34).
+# Built-in tools the scribe does not need: they weigh down the prefix of every launch (CANON:21).
 disallowedTools: Artifact, SendUserFile, SuggestPluginInstall, SuggestSkills, SearchPlugins
 ---
 

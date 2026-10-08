@@ -70,4 +70,4 @@ sandbox and nothing written outside it (compare file fingerprints of the real ca
 |---|---|---|---|---|
 
 Count the requests over 100k prompt tokens: past that threshold, the most economical model bills
-more per token (`CANON:40`).
+more per token (`CANON:27`).

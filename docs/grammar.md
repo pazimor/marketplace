@@ -1,7 +1,7 @@
 # Formal grammar — canon and roadmap
 
 This document **describes** the grammar defined by the two skills of the `orchestration` plugin.
-It invents no variant of its own: the SKILL.md files alone own the grammar (`CANON:3`). If this
+It invents no variant of its own: the SKILL.md files alone own the grammar (`CANON:2`). If this
 document and a SKILL.md differ, the SKILL.md prevails and this document must be corrected.
 
 - Canon: `plugins/orchestration/skills/canon-tracker/SKILL.md`, § "Where the canon lives",
@@ -201,7 +201,7 @@ These apply only to the marketplace repo; they are ignored elsewhere.
 
 | Code | Level | Rule |
 |---|---|---|
-| `manifest.json` | ERROR | `.claude-plugin/marketplace.json` and each `plugins/*/.claude-plugin/plugin.json` load as JSON (`CANON:4`) |
+| `manifest.json` | ERROR | `.claude-plugin/marketplace.json` and each `plugins/*/.claude-plugin/plugin.json` load as JSON (`CANON:3`) |
 | `manifest.plugin-name` / `manifest.plugin-version` | ERROR | `plugin.json`: `name` non-empty, `version` semver 2.0 |
 | `manifest.marketplace-*` | ERROR | `marketplace.json`: `name`, `owner.name`, `plugins[]` with `name` + `source`; `version` semver if present; local source as `./…` containing a `plugin.json` |
 | `manifest.name-mismatch` / `manifest.version-mismatch` | ERROR | Name (and version, if the catalog entry carries one) of the catalog entry = those of the `plugin.json` it points to |
@@ -209,10 +209,10 @@ These apply only to the marketplace repo; they are ignored elsewhere.
 | `frontmatter.syntax` | ERROR | `plugins/*/agents/*.md` and `plugins/*/skills/*/SKILL.md` start with a readable `---` … `---` frontmatter |
 | `frontmatter.name` / `frontmatter.description` | ERROR | Fields present and non-empty |
 | `frontmatter.model` | ERROR | `model` ∈ {`opus`, `sonnet`, `haiku`, `fable`, `inherit`} or a `claude-*` ID |
-| `plugin.model-mention` | ERROR | Model name (`opus`, `sonnet`, `haiku`, `fable`, whole word, case ignored) in a `.md` or `.json` under `plugins/`, outside the `model:` line of an agent's frontmatter (`CANON:35`) |
-| `frontmatter.effort` | ERROR | `effort` ∈ {`low`, `medium`, `high`, `xhigh`, `max`} (`CANON:11`) |
+| `plugin.model-mention` | ERROR | Model name (`opus`, `sonnet`, `haiku`, `fable`, whole word, case ignored) in a `.md` or `.json` under `plugins/`, outside the `model:` line of an agent's frontmatter (`CANON:22`) |
+| `frontmatter.effort` | ERROR | `effort` ∈ {`low`, `medium`, `high`, `xhigh`, `max`} (`CANON:6`) |
 | `frontmatter.mascot` | WARN | `mascot` of an agent ∈ {`scribe`, `chef`, `artist`, `inspector`, `courier`, `artisan`, `scholar`, `mage`, `bare`}: mascot of the `agents-info` band, which Claude Code ignores |
-| `frontmatter.plugin-agent-ignored` | WARN | `hooks`, `mcpServers`, `permissionMode` in a plugin agent: ignored by Claude Code (`CANON:11`) |
+| `frontmatter.plugin-agent-ignored` | WARN | `hooks`, `mcpServers`, `permissionMode` in a plugin agent: ignored by Claude Code (`CANON:6`) |
 | `frontmatter.name-format` / `frontmatter.name-dir` | WARN | `name` in kebab-case; a skill's `name` = its folder name |
 
 The frontmatter is read by a mini YAML parser (top-level keys, plain or quoted scalars, `|`/`>`
@@ -233,7 +233,7 @@ blocks, comments): enough for these files, with no dependency on PyYAML.
   `blocked:`": does `blocked:` also require `claimed by`? The validator accepts `[~]` with one **or**
   the other.
 - **A5 — Text after the suffix.** The real roadmap carries dated annotations after `)_` ("— decision
-  2026-09-24: retired (CANON:10)"). The grammar does not provide for them, but "scope decisions are
+  2026-09-24: retired"). The grammar does not provide for them, but "scope decisions are
   dated in the text"; they are accepted.
 - **A6 — Unfinished dependency.** The claim rule ("if a dependency is not done: report it and stop")
   is an operation rule, not grammar, and the real roadmap contains exceptions decided by the user

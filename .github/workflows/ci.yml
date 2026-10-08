@@ -1,4 +1,4 @@
-# Repo tooling only (CANON:5): the validator also runs locally, without GitHub —
+# Repo tooling only: the validator also runs locally, without GitHub —
 #   python3 scripts/validate.py . && python3 -m unittest discover -s scripts/tests -v
 name: CI
 

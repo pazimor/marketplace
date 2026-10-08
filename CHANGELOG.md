@@ -1,7 +1,7 @@
 # Changelog
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions [semver](https://semver.org/).
-Rule (`CANON:9`): every change to a distributed skill or agent increments the version of the plugin concerned
+Rule (`CANON:5`): every change to a distributed skill or agent increments the version of the plugin concerned
 (`plugins/<plugin>/.claude-plugin/plugin.json`) and adds an entry here;
 the version of `.claude-plugin/marketplace.json` follows every change to the catalog.
 
@@ -12,21 +12,22 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 ## [Unreleased]
 
 ### plugin `orchestration` 1.0.0 — marketplace 0.13.0 — Changed (breaking)
-- Everything is now in English (`CANON:53`): agents, skills, frontmatter descriptions, validator messages, docs.
-- Agents renamed (`CANON:55`): `orchestration:orchestrateur` → `orchestration:orchestrator`, `orchestration:executant-*` → `orchestration:executor-*` (files `agents/executor-{low,medium,high,xhigh,max}.md`). Reinstall the plugin and restart the app (`CANON:51`).
-- Canon and roadmap grammar in English, no backward compatibility (`CANON:54`). Migrating a project with French files:
+- Everything is now in English (`CANON:40`): agents, skills, frontmatter descriptions, validator messages, docs.
+- Agents renamed (`CANON:42`): `orchestration:orchestrateur` → `orchestration:orchestrator`, `orchestration:executant-*` → `orchestration:executor-*` (files `agents/executor-{low,medium,high,xhigh,max}.md`). Reinstall the plugin and restart the app (`CANON:38`).
+- Canon and roadmap grammar in English, no backward compatibility (`CANON:41`). Migrating a project with French files:
   - canon: rename `.claude/canon/attentes.md` → `expectations.md` (a `divers.md` catch-all is now `misc.md`, still forbidden); `— obsolète AAAA-MM-JJ : <raison>` → `— obsolete YYYY-MM-DD: <reason>`; `(promu de MODEL)` → `(promoted from MODEL)`;
   - roadmap: `Règles :` → `Rules:`, `DoD du milestone :` → `Milestone DoD:`, `- Canon :` → `- Canon:`; title prefixes `[JALON]` → `[PLACEHOLDER]`, `[RÉCURRENT]` → `[RECURRING]`, `[FOND]` → `[BACKGROUND]`, `[RÉFLEXION]` → `[RESEARCH]`;
   - then run `python3 scripts/validate.py <project>` until it reports 0 errors.
 - `validate.py`: finding code `canon.divers` renamed `canon.misc`; mascot catalog in English.
+- Agents cite the renumbered canon IDs (see marketplace 0.13.0 — Canon renumbered).
 
 ### plugin `level-design` 0.2.0 — marketplace 0.13.0 — Changed
-- Skills, references and reviewer in English (`CANON:53`). References renamed: `pieges.md` → `pitfalls.md`, `recettes.md` → `recipes.md`, `exterieur.md` → `exterior.md`, `interieur.md` → `interior.md`, `rendu.md` → `rendering.md`.
+- Skills, references and reviewer in English (`CANON:40`). References renamed: `pieges.md` → `pitfalls.md`, `recettes.md` → `recipes.md`, `exterieur.md` → `exterior.md`, `interieur.md` → `interior.md`, `rendu.md` → `rendering.md`.
 - Dials renamed `OPENNESS` / `DENSITY` / `RELIEF` / `NATURE`; index sections of `.claude/level-design/index.md` are `Context`, `Human expectations`, `Always read`, `Specs`, `Quality control`, `Steps`, `Pitfalls`.
 - `level-design-reviewer` declares `mascot: artist`.
 
 ### plugin `agents-info` 0.10.0 — marketplace 0.13.0 — Changed
-- The main agent is never inferred any more: launching the orchestrator no longer renames a `default` main agent `orchestration:scribe`; the main agent, the scribe and the orchestrator are three peers (`CANON:27`). A state saved by an older version is reset on reload.
+- The main agent is never inferred any more: launching the orchestrator no longer renames a `default` main agent `orchestration:scribe`; the main agent, the scribe and the orchestrator are three peers (`CANON:17`). A state saved by an older version is reset on reload.
 - Worked time: a resumed agent's clock counts its stretches of work only, not the wait between two resumes (`workedMs`, fields `activeSince` / `activeMs`); used by the band's cards.
 - `/agents-info` pane redrawn in the band's visual language. Four sections, each folding on its title (state shared by every surface, all open by default; replaces the compact / detail toggle):
   - **Limits**: one gauge per window (5 h, 7 days), solid in the color of its level, the forecast to the reset hatched, a tick on each alert threshold of the options; reset time and, when it comes first, the time the window runs out, in local time.
@@ -37,14 +38,17 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - README: preview of the `/agents-info` pane at 100 columns (`docs/agents-info-pane-preview.svg`, generated with its HTML twin by `scripts/preview-agents-info.mts`).
 
 ### plugin `agents-info` 0.9.0 — marketplace 0.13.0 — Changed
-- Renamed from `session-recap` (`CANON:58`): folder `plugins/agents-info/`, install `agents-info@marketplace`, command `/agents-info`, tools `mcp__agents-info__plan` / `mcp__agents-info__step`, state key `agents-info`. Uninstall `session-recap@marketplace`, install `agents-info@marketplace` and restart the app; its options must be set again. Earlier entries below use the new name.
-- Pane, band, toasts, tool descriptions and options in English (`CANON:53`).
+- Renamed from `session-recap` (`CANON:44`): folder `plugins/agents-info/`, install `agents-info@marketplace`, command `/agents-info`, tools `mcp__agents-info__plan` / `mcp__agents-info__step`, state key `agents-info`. Uninstall `session-recap@marketplace`, install `agents-info@marketplace` and restart the app; its options must be set again. Earlier entries below use the new name.
+- Pane, band, toasts, tool descriptions and options in English (`CANON:40`).
 - Band: the main agent's `model · effort |` and the progress bar share one line (the bar gives up the label's columns, `barWidth(columns, reserved)`); percentage and steps stay below.
-- Mascot names in English (`CANON:55`): `artiste` → `artist`, `inspecteur` → `inspector`, `coursier` → `courier`, `savant` → `scholar`, `nu` → `bare` (`scribe`, `chef`, `artisan`, `mage` unchanged). An agent still declaring an old name falls back to its model tier's mascot.
+- Mascot names in English (`CANON:42`): `artiste` → `artist`, `inspecteur` → `inspector`, `coursier` → `courier`, `savant` → `scholar`, `nu` → `bare` (`scribe`, `chef`, `artisan`, `mage` unchanged). An agent still declaring an old name falls back to its model tier's mascot.
+
+### marketplace 0.13.0 — Canon renumbered
+- One-time exception decided by the user (`CANON:55`): the entries that went away with the legacy and the translation (old `CANON:1`, 5, 6, 7, 10, 14, 18, 19, 20, 22, 28, 29, 30, 56) left gaps; the canon is renumbered `CANON:1` to `CANON:54` in its original order, and every reference in the repo follows (this file included). Citations of the removed entries are dropped. To read `main`'s history or an older commit, old → new: 2→1 · 3→2 · 4→3 · 8→4 · 9→5 · 11→6 · 12→7 · 13→8 · 15→9 · 16→10 · 17→11 · 21→12 · 23→13 · 24→14 · 25→15 · 26→16 · 27→17 · 31→18 · 32→19 · 33→20 · 34→21 · 35→22 · 36→23 · 37→24 · 38→25 · 39→26 · 40→27 · 41→28 · 42→29 · 43→30 · 44→31 · 45→32 · 46→33 · 47→34 · 48→35 · 49→36 · 50→37 · 51→38 · 52→39 · 53→40 · 54→41 · 55→42 · 57→43 · 58→44 · 59→45 · 60→46 · 61→47 · 62→48 · 63→49 · 64→50 · 65→51 · 66→52 · 67→53 · 68→54.
 
 ### marketplace 0.13.0 — Removed
 - `bench/` (test benchmarks of 2026-10-08): out of the repo; their method is kept in `tools/bench.md`, the original files and measurements in the history (`git show 5630742:bench/README.md`).
-- `market-mem/` (auth skeleton kept for M4): removed entirely (`CANON:56`); recoverable from commit `5630742`.
+- `market-mem/` (auth skeleton kept for M4): removed entirely; recoverable from commit `5630742`.
 
 ### marketplace 0.13.0 — Changed
 - Logo: `assets/marketplace.svg`, a little plugin shop whose shopkeepers are the `agents-info` mascots (`chef`, `artist`, `inspector`), replacing `assets/marketplace.png`.
@@ -63,10 +67,10 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - `validate.py`: `frontmatter.mascot` (WARN) for an unknown mascot name.
 
 ### plugin `orchestration` 0.9.0 — marketplace 0.12.0 — Changed
-- Economical delegation (`CANON:32`): the orchestrator starts from the most economical model as soon as the task has an executable criterion that is independent of the executor, moves up one model on a comprehension failure and raises the effort on an application failure, and goes straight to the most capable model when a failure would not show up against the criterion (review, judge, architecture, audit, framing, broad exploration). Model and effort become two independent axes; "when in doubt, one notch up" no longer applies to the model (it sent everything to the most capable one). A routing table in the project's canon (task type → model × effort) takes precedence over these rules of thumb, and the report gives the model and effort of each attempt to feed it.
-- Independent criterion (`CANON:33`): never only the tests written by the executor; existing tests or acceptance cases in the brief, plus held-out cases run by the orchestrator on return. Measured: an executor that had misread a rule was caught by its own tests only because the specification was explicit.
-- Launch cost (`CANON:34`): each agent launch writes ~60k tokens of prefix before the brief (`CANON:37`, measured in 2.1.293 on the desktop). Mechanical micro-tasks within the same scope are sent in a single brief; `disallowedTools` removes from the executors, the orchestrator and the scribe the built-in tools they have no use for (gain to be measured in a fresh session, `ROADMAP:TASK:35`). The orchestrator switches to `effort: high` instead of inheriting the session's effort.
-- Scribe on the most economical model (`CANON:35`, replaces `CANON:30`): `model` and `effort: xhigh` set in its frontmatter, the only agent in the plugin that sets its own model. Benchmark of 2026-10-08 on a typical pass (8 points, including two pitfalls targeting `[USER]` entries): the most economical model passes all the critical points (provenance, refusals, IDs, grammar, validation) at 3 to 5 times cheaper than the mid-tier model. Before 2.1.293, the alias resolves to the previous generation, without effort setting (`CANON:38`).
+- Economical delegation (`CANON:19`): the orchestrator starts from the most economical model as soon as the task has an executable criterion that is independent of the executor, moves up one model on a comprehension failure and raises the effort on an application failure, and goes straight to the most capable model when a failure would not show up against the criterion (review, judge, architecture, audit, framing, broad exploration). Model and effort become two independent axes; "when in doubt, one notch up" no longer applies to the model (it sent everything to the most capable one). A routing table in the project's canon (task type → model × effort) takes precedence over these rules of thumb, and the report gives the model and effort of each attempt to feed it.
+- Independent criterion (`CANON:20`): never only the tests written by the executor; existing tests or acceptance cases in the brief, plus held-out cases run by the orchestrator on return. Measured: an executor that had misread a rule was caught by its own tests only because the specification was explicit.
+- Launch cost (`CANON:21`): each agent launch writes ~60k tokens of prefix before the brief (`CANON:24`, measured in 2.1.293 on the desktop). Mechanical micro-tasks within the same scope are sent in a single brief; `disallowedTools` removes from the executors, the orchestrator and the scribe the built-in tools they have no use for (gain to be measured in a fresh session, `ROADMAP:TASK:35`). The orchestrator switches to `effort: high` instead of inheriting the session's effort.
+- Scribe on the most economical model (`CANON:22`): `model` and `effort: xhigh` set in its frontmatter, the only agent in the plugin that sets its own model. Benchmark of 2026-10-08 on a typical pass (8 points, including two pitfalls targeting `[USER]` entries): the most economical model passes all the critical points (provenance, refusals, IDs, grammar, validation) at 3 to 5 times cheaper than the mid-tier model. Before 2.1.293, the alias resolves to the previous generation, without effort setting (`CANON:25`).
 - The scribe declares `mascot: scribe` and the orchestrator `mascot: chef` for the `agents-info` band.
 - `canon-tracker`: a `[USER]` entry carries only what the user said or validated; details taken from another entry or observed go into a separate `[MODEL]` entry (gap spotted in the benchmark).
 
@@ -74,7 +78,7 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - Desktop: bar and mascots drawn as an image (`Svg` without `isInteractive`). The isolated frame was recreated at every render of the band despite an identical source: white background flash, flicker, and the crab's animation restarted. The band's tick switches to 1 s outside the terminal (the SVGs animate on their own) and the text no longer carries a spinner there. The per-step `<title>` tooltips on the bar no longer show; the card on hover over the band still gives steps and durations.
 
 ### plugin `orchestration` 0.8.0 — Changed
-- The agents (`scribe`, `orchestrator`, `executor-*`) no longer have a `model` (`CANON:30`, replaces `CANON:22`). Scribe and orchestrator inherit the session's model; the orchestrator chooses and passes each executor's model at call time (`model`, `opts.model` in a workflow), independently of the effort, using rules of thumb by task type, and re-delegates one notch lower if a model is refused by the settings. The exclusion of the most expensive tier moves into the user settings; the advisor is no longer relied on. Executors still differ only by `effort`.
+- The agents (`scribe`, `orchestrator`, `executor-*`) no longer have a `model`. Scribe and orchestrator inherit the session's model; the orchestrator chooses and passes each executor's model at call time (`model`, `opts.model` in a workflow), independently of the effort, using rules of thumb by task type, and re-delegates one notch lower if a model is refused by the settings. The exclusion of the most expensive tier moves into the user settings; the advisor is no longer relied on. Executors still differ only by `effort`.
 - `validate.py`: removed `frontmatter.model-forbidden` and `frontmatter.model-missing`; `plugin.model-mention` stays.
 - Orchestrator with a bounded lifetime: one framing brief = one call, ended by the report; a new batch goes to a new orchestrator (description, scribe). Executors always run in the foreground (`run_in_background: false`) so that their reports come back to the orchestrator instead of being relayed by the main agent, and never end a turn with an executor still running. Framing brief too large: stop at the last verified milestone and relaunch on a fresh orchestrator. Observed: an orchestrator kept alive for 22 h, 203 messages relayed, context at 921k, ~387M cumulative input tokens.
 
@@ -82,7 +86,7 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - Band on the desktop: the bar and the mascots had a frame's default size (300 × 150) on a white background and flickered. Explicit size passed to `Svg` (`progressWidth` / `PROGRESS_HEIGHT`, `crabWidth` / `CRAB_HEIGHT`); `color-scheme: light dark` at the root of the SVGs for a transparent background; identical SVG source from one tick to the next: the badge's tooltip no longer shows a duration that keeps advancing, and the state fade is a CSS animation applied for the duration of the fade instead of a color recalculated at each tick (the isolated frame reloaded on every source change).
 
 ### plugin `orchestration` 0.7.0 (formerly `roadmap` 0.6.0) — marketplace 0.11.0 — Renamed
-- The `roadmap` plugin becomes `orchestration`: folder `plugins/orchestration/`, installation `/plugin install orchestration@marketplace`, agents `orchestration:scribe`, `orchestration:orchestrator`, `orchestration:executor-*` (`CANON:28`). Skills (`roadmap-tracker`, `canon-tracker`) and files (`.claude/roadmap.md`, `.claude/canon/`) unchanged: no migration of projects that already use it. User-side migration: `claude plugin uninstall roadmap@marketplace` then `claude plugin install orchestration@marketplace`.
+- The `roadmap` plugin becomes `orchestration`: folder `plugins/orchestration/`, installation `/plugin install orchestration@marketplace`, agents `orchestration:scribe`, `orchestration:orchestrator`, `orchestration:executor-*`. Skills (`roadmap-tracker`, `canon-tracker`) and files (`.claude/roadmap.md`, `.claude/canon/`) unchanged: no migration of projects that already use it. User-side migration: `claude plugin uninstall roadmap@marketplace` then `claude plugin install orchestration@marketplace`.
 - `agents-info` recognizes the agent `orchestration:scribe`.
 
 ### marketplace 0.10.1 — Changed
@@ -92,7 +96,7 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - Display of a real workflow (`workflow: true` only): one section per phase, "n/m agents · phase:" followed by the cards of the phase's agents (the first title also carries the spinner, percentage and duration); agents planned but not yet launched appear as "agent n — upcoming" slots. An agent launched before the plan is attached to the current phase. Outside a workflow, nothing changes (cards of the active agents).
 
 ### plugin `roadmap` 0.6.0 — marketplace 0.9.0 — Changed
-- `scribe` is no longer the entry point (a Claude Desktop session cannot start with it, `CANON:27`). The main agent, the `scribe` and the `orchestrator` are three equal peers that talk to each other directly (`SendMessage`, short messages carrying IDs and paths). The scribe keeps the canon and the roadmap, relays and copies nothing (its context no longer fills up for nothing); the orchestrator reports back to its caller and sends its findings to the scribe. The `--agent roadmap:scribe` setting is gone.
+- `scribe` is no longer the entry point (a Claude Desktop session cannot start with it, `CANON:17`). The main agent, the `scribe` and the `orchestrator` are three equal peers that talk to each other directly (`SendMessage`, short messages carrying IDs and paths). The scribe keeps the canon and the roadmap, relays and copies nothing (its context no longer fills up for nothing); the orchestrator reports back to its caller and sends its findings to the scribe. The `--agent roadmap:scribe` setting is gone.
 
 ### plugin `agents-info` 0.6.0 — marketplace 0.9.0 — Changed
 - Band: the agent name (`✓ scribe` / `⚠ … not the scribe`) and the "title (workflow) — step" line disappear; the identity line keeps only model · effort.
@@ -125,14 +129,14 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - Band: hovering expands a card with the active agents and the limits.
 
 ### plugin `agents-info` 0.1.0 — marketplace 0.7.0 — Added
-- New `agents-info` plugin (`CANON:23`): a Mod made of function hooks (Claude Code 2.1.287, API in early access, `CANON:24`), read-only. From `session.start`, `turn.start`, `agent.spawn`, `turn.step` (and its `stop` chunk), `turn.complete` and `session.measure`, it builds a recap per agent: starting agent, timeline per prompt (new, resumed, forked, active), resolved model, applied effort, tokens per agent × model × effort, 5 h / 7 days limits with a linear forecast.
+- New `agents-info` plugin (`CANON:13`): a Mod made of function hooks (Claude Code 2.1.287, API in early access, `CANON:14`), read-only. From `session.start`, `turn.start`, `agent.spawn`, `turn.step` (and its `stop` chunk), `turn.complete` and `session.measure`, it builds a recap per agent: starting agent, timeline per prompt (new, resumed, forked, active), resolved model, applied effort, tokens per agent × model × effort, 5 h / 7 days limits with a linear forecast.
 - `/agents-info` pane (`/recap` is a built-in command) and a one-line band above the prompt; options `autoOpen`, `compactBand`.
 - Toast alerts (phase 4): limit thresholds (80 / 95%), token budget per agent and per session, unexpected model (an agent that answers on a model other than the one resolved at its launch), share of the main agent. All adjustable through `userConfig`.
 - Tests `claude plugin test plugins/agents-info`: model replayed with the events recorded by the probe, rendering of the pane and the band on the terminal, desktop, vscode and mobile surfaces.
 - Engine declarations versioned in `.claude/types/`; plan and findings in `docs/plan-agents-info.md`.
 
 ### plugin `roadmap` 0.5.0 — marketplace 0.6.0 — Added / Changed
-- New `scribe` agent, entry point (`CANON:22`). It is the only one talking to the user: it rephrases, proposes approaches, asks questions and keeps the canon and roadmap up to date as it goes. It then hands a validated framing brief to the orchestrator, then runs the capture ritual. It must be the main agent of the session (`claude --agent roadmap:scribe`).
+- New `scribe` agent, entry point. It is the only one talking to the user: it rephrases, proposes approaches, asks questions and keeps the canon and roadmap up to date as it goes. It then hands a validated framing brief to the orchestrator, then runs the capture ritual. It must be the main agent of the session (`claude --agent roadmap:scribe`).
 - `orchestrator`: it receives the scribe's framing brief, splits it, delegates (effort per executor), writes the workflow if requested, and verifies. It reports back to the scribe with the criteria outputs, the questions and the findings to capture. It no longer writes the canon or the roadmap, and no longer talks to the user.
 - Each agent sets its model in its frontmatter (`scribe`, `orchestrator`, `executor-*`), which is the only place a model is named. No `inherit` anymore, which took the most expensive tier (`ROADMAP:TASK:24`). The orchestrator never passes `model` at call time.
 - `orchestrator`: an advisor (`/advisor`) configured by the user automatically corrects the executors running on a smaller model.
@@ -140,20 +144,20 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - `scripts/validate.py`: three new rules, `frontmatter.model-forbidden` (forbidden tier), `frontmatter.model-missing` (WARN, plugin agent without an explicit model) and `plugin.model-mention` (model named outside an agent's `model:` line). Associated tests.
 
 ### plugin `level-design` 0.1.1 — Changed
-- `level-design-build`: no more commits; the working tree goes back to the human (`CANON:17`); "according to this column" corrected.
-- No more absolute distances in the plugin (`CANON:21`). Values are expressed in kit modules and cells, in multiples of the measured player gauge, in seconds of running or in proportions (of the fog, of the foreground). Platform steps are measured below the controller's step height. Along the way, the contradiction "1 lamp / 40 m²" vs. "1 lamp per corridor step" disappears.
+- `level-design-build`: no more commits; the working tree goes back to the human (`CANON:11`); "according to this column" corrected.
+- No more absolute distances in the plugin (`CANON:12`). Values are expressed in kit modules and cells, in multiples of the measured player gauge, in seconds of running or in proportions (of the fog, of the foreground). Platform steps are measured below the controller's step height. Along the way, the contradiction "1 lamp / 40 m²" vs. "1 lamp per corridor step" disappears.
 
 ### plugin `roadmap` 0.4.0 — marketplace 0.5.1 — Changed
-- `orchestrator`: no longer names any model (`CANON:20`). It only chooses the effort (for the executor) and no longer passes `model` at call time, nor `opts.model` in a workflow, unless the canon or the user sets one. It runs itself under `model: inherit`. After a comprehension failure, it flags the need for a more capable model instead of choosing one. A typo fixed along the way.
+- `orchestrator`: no longer names any model. It only chooses the effort (for the executor) and no longer passes `model` at call time, nor `opts.model` in a workflow, unless the canon or the user sets one. It runs itself under `model: inherit`. After a comprehension failure, it flags the need for a more capable model instead of choosing one. A typo fixed along the way.
 - `executor-*`: the description says the model is left to the harness.
-- `roadmap-tracker`: the "Memory context" step points to the read gate of `canon-tracker` (`.claude/canon/`) instead of the former memory files; removal of the mention of `_memory_migration/` (installer removed, `CANON:10`).
+- `roadmap-tracker`: the "Memory context" step points to the read gate of `canon-tracker` (`.claude/canon/`) instead of the former memory files; removal of the mention of `_memory_migration/` (installer removed).
 - `canon-tracker`: removed a redundant emphasis from the capture ritual.
 - `roadmap-tracker`: "canon" reserved for `.claude/canon/` in the prose ("The spec is authoritative", "Spec first"); the `- Canon:` field of the grammar is unchanged.
 
 ## plugin `level-design` 0.1.0 — marketplace 0.5.0 — 2026-09-28
 
 ### Added
-- Plugin `level-design` (`CANON:15`), generic in the sense of `CANON:8` (`CANON:16`):
+- Plugin `level-design` (`CANON:9`), generic in the sense of `CANON:4` (`CANON:10`):
   - skill `level-design-taste`: reading the level in one line, dials OPENNESS / DENSITY / RELIEF / NATURE with presets, two placement grammars, directives, banned AI tells, vocabulary, new-version protocol, measurable pre-flight; references `exterior.md`, `interior.md`, `rendering.md`, `audits.md`;
   - skill `level-design-build`: framing → measured recipes → spec → questions → idempotent pass → play → judgment → delivery; references `spec.md` (template), `recipes.md`, `pitfalls.md`, `extensions.md`;
   - **project extensions**: `.claude/level-design/index.md` (grammar in `extensions.md`) declares the context, the expectations, the references per scene type, the existing specs and recipes, the checklist, the per-step details and the project's pitfalls; read by both skills and the reviewer, it takes precedence over the plugin (the `[USER]` canon takes precedence over it). A new version picks up its spec; a measured recipe is reused;
@@ -170,14 +174,14 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 - `orchestrator`: `opus` also covers audits and long migrations, with an instruction to explore broadly when the sources are not named.
 
 ### Changed
-- `orchestrator` made generic (`CANON:8`): no more mention of Unity/prefab; the project's specifics are read from its canon.
+- `orchestrator` made generic (`CANON:4`): no more mention of Unity/prefab; the project's specifics are read from its canon.
 
 ### Repo tooling
 - `docs/grammar.md` (EBNF grammar of the canon + roadmap), `scripts/validate.py` + tests, GitHub Actions CI (validation + installation smoke test).
 
 ### Removed
 - Plugin `memory` (hooks, distiller, `.mcp.json`) — ROADMAP:TASK:10.
-- Installer `market` (`installer/`, `claude.py`, `pyproject.toml`, `.env.example`); `market-mem` reduced to the auth skeleton for M4 (`CANON:10`).
+- Installer `market` (`installer/`, `claude.py`, `pyproject.toml`, `.env.example`); `market-mem` reduced to the auth skeleton for M4.
 
 ## plugin `roadmap` 0.2.0 — marketplace 0.3.0 — 2026-09-17
 

@@ -10,12 +10,12 @@ description: >-
   with the report: a new batch goes to a new orchestrator (fresh context), never via
   SendMessage to an orchestrator that has already reported or is still running, and its
   executors' reports are not relayed to it (they come back to it directly).
-# No `model`: inherits the session's model; chooses the model of each executor (CANON:35).
-# `effort` is set here rather than inherited from the session (CANON:34).
+# No `model`: inherits the session's model; chooses the model of each executor (CANON:22).
+# `effort` is set here rather than inherited from the session (CANON:21).
 effort: high
 # Mascot for the agents-info band (ignored by Claude Code and without the Mod).
 mascot: chef
-# Built-in tools the orchestrator does not need: they weigh down the prefix of every launch (CANON:34).
+# Built-in tools the orchestrator does not need: they weigh down the prefix of every launch (CANON:21).
 disallowedTools: Artifact, SendUserFile, SuggestPluginInstall, SuggestSkills, SearchPlugins
 ---
 
