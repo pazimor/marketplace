@@ -1,0 +1,4 @@
+{
+  "description": "Agents info: observes agents, models, efforts, tokens and limits, without changing anything.",
+  "modules": ["register.tsx"]
+}

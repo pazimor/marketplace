@@ -12,5 +12,7 @@ venv/
 # Runtime state
 *.log
 
-# Local TLS certs (mkcert)
-market-mem/certs/
+.claude/types
+
+# Generated preview gallery (scripts/preview-agents-info.mts)
+docs/agents-info-gallery.html

@@ -1,0 +1,68 @@
+{
+  "name": "agents-info",
+  "version": "0.10.0",
+  "description": "Agents info Mod (Claude Code 2.1.287, Mods API in early access): starting agent, timeline of agents per prompt (new, resumed, forked), resolved model and effort of each, tokens per agent × model × effort, 5 h / 7 day limits with forecast, alerts. Read-only: alters and blocks nothing.",
+  "author": {
+    "name": "eddy-hummel",
+    "email": "eddy.hummel@gmail.com"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the pane at startup",
+      "description": "Opens the /agents-info pane at the start of each interactive session.",
+      "default": true
+    },
+    "compactBand": {
+      "type": "boolean",
+      "title": "Compact band",
+      "description": "One line above the prompt: main agent, active agents, limits.",
+      "default": true
+    },
+    "limitWarn": {
+      "type": "number",
+      "title": "Limit alert (%)",
+      "description": "Alert threshold on each limit window (5 h, 7 days…).",
+      "default": 80,
+      "min": 1,
+      "max": 100
+    },
+    "limitCritical": {
+      "type": "number",
+      "title": "Critical limit alert (%)",
+      "description": "Second alert threshold on each limit window.",
+      "default": 95,
+      "min": 1,
+      "max": 100
+    },
+    "agentTokenLimit": {
+      "type": "number",
+      "title": "Token threshold per agent",
+      "description": "Alert when an agent exceeds this total (input + output + cache write). 0 = disabled.",
+      "default": 0,
+      "min": 0
+    },
+    "sessionTokenLimit": {
+      "type": "number",
+      "title": "Token threshold per session",
+      "description": "Alert when the session exceeds this total (input + output + cache write). 0 = disabled.",
+      "default": 0,
+      "min": 0
+    },
+    "mainShareLimit": {
+      "type": "number",
+      "title": "Max share of the main agent (%)",
+      "description": "Alert when the main agent exceeds this share of the session's tokens (from 20,000 tokens). 0 = disabled.",
+      "default": 0,
+      "min": 0,
+      "max": 100
+    },
+    "modelMismatch": {
+      "type": "boolean",
+      "title": "Unexpected model alert",
+      "description": "Alert when a sub-agent answers on a model other than the one resolved at its launch (for example after a resume).",
+      "default": true
+    }
+  }
+}

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Audit d'usage des skills et agents d'un projet Claude Code, depuis ses transcripts.
+"""Usage audit of the skills and agents of a Claude Code project, from its transcripts.
 
-Lit ~/.claude/projects/<slug>/**/*.jsonl (sessions + sous-agents) et compte :
-  - skills : appels à l'outil Skill, /commandes tapées, lectures directes de SKILL.md
-  - agents : appels à l'outil Agent/Task par subagent_type
-  - mentions (option --mention) : citations d'un nom dans le texte user/assistant,
-    listes de skills injectées par le système exclues
+Reads ~/.claude/projects/<slug>/**/*.jsonl (sessions + subagents) and counts:
+  - skills: calls to the Skill tool, typed /commands, direct reads of SKILL.md
+  - agents: Agent/Task tool calls per subagent_type
+  - mentions (option --mention): mentions of a name in the user/assistant text,
+    system-injected skill lists excluded
 
-Un « 0 appel » veut dire que le skill n'a jamais été chargé, pas qu'il n'a jamais
-influencé une réponse (son contenu a pu être recopié ailleurs). Seules les sessions
-de la machine locale sont vues.
+A "0 calls" count means the skill has never been loaded, not that it never influenced
+an answer (its content may have been copied elsewhere). Only sessions from the local
+machine are seen.
 
-Usage :
-  python3 tools/skill_audit.py                       # projet = dossier courant
+Usage:
+  python3 tools/skill_audit.py                       # project = current folder
   python3 tools/skill_audit.py --project ~/Test_starship
   python3 tools/skill_audit.py --exclude <session-id> --mention Fight-Mechanics
   python3 tools/skill_audit.py --json > audit.json
@@ -31,7 +31,7 @@ REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 
 
 def project_slug(path):
-    # Claude Code remplace tout caractère non alphanumérique par « - »
+    # Claude Code replaces every non-alphanumeric character with "-"
     return re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(os.path.expanduser(path)))
 
 
@@ -129,23 +129,23 @@ def print_table(title, table):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--project", default=".", help="dossier du projet (défaut : dossier courant)")
-    ap.add_argument("--exclude", action="append", default=[], help="id de session à ignorer (répétable)")
-    ap.add_argument("--mention", action="append", default=[], help="nom à chercher dans le texte (répétable)")
-    ap.add_argument("--json", action="store_true", help="sortie JSON")
+    ap.add_argument("--project", default=".", help="project folder (default: current folder)")
+    ap.add_argument("--exclude", action="append", default=[], help="session id to ignore (repeatable)")
+    ap.add_argument("--mention", action="append", default=[], help="name to search for in the text (repeatable)")
+    ap.add_argument("--json", action="store_true", help="JSON output")
     args = ap.parse_args()
 
     root = os.path.expanduser(os.path.join("~/.claude/projects", project_slug(args.project)))
     if not os.path.isdir(root):
-        sys.exit(f"aucun transcript : {root}")
+        sys.exit(f"no transcript: {root}")
     res = audit(root, set(args.exclude), args.mention)
 
     if args.json:
         json.dump({**res, **{k: serialisable(res[k]) for k in ("skills", "agents", "mentions")}},
                   sys.stdout, indent=2, ensure_ascii=False)
         return
-    print(f"transcripts : {root}")
-    print(f"période {res['period'][0]} .. {res['period'][1]} — {res['files']} fichiers" if res["period"] else "vide")
+    print(f"transcripts: {root}")
+    print(f"period {res['period'][0]} .. {res['period'][1]} — {res['files']} files" if res["period"] else "empty")
     print_table("SKILLS", res["skills"])
     print_table("AGENTS", res["agents"])
     if args.mention:
