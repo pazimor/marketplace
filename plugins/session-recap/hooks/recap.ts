@@ -144,6 +144,7 @@ export function onSpawn(
     resumes: (known?.resumes ?? 0) + (known !== undefined ? 1 : 0),
     startedAt: known?.startedAt ?? e.at,
     tokens: known?.tokens ?? zero(),
+    ...(known?.mascot !== undefined ? { mascot: known.mascot } : {}),
   }
   let withPlan = s
   if (known === undefined && run.stepIndex !== undefined) withPlan = bumpStep(s, run.stepIndex, 'started')
@@ -704,8 +705,19 @@ const level = (c: number, row: number): number => LEVELS[PATTERN[row % ROWS]![((
 const COL_PX = 7
 /** Largeur de la barre : toute la ligne disponible (moins une marge), de 160 px à 1600 px. */
 export const barWidth = (bodyColumns: number): number => Math.min(1600, Math.max(160, Math.floor((bodyColumns - 4) * COL_PX)))
+/** Hauteur en px de la barre SVG (la pastille dépasse la piste). */
+export const PROGRESS_HEIGHT = TRACK_H + TRACK_Y * 2
+/** Largeur en px de la barre SVG pour une largeur demandée. */
+export const progressWidth = (width: number): number => Math.max(120, Math.floor(width))
+/**
+ * Style de la racine des SVG du bureau, fond transparent. Les SVG sont dessinés en image, jamais en cadre isolé
+ * (`isInteractive`) : le cadre, recréé à chaque rendu du bandeau, flashait en blanc et relançait les animations.
+ */
+const SVG_ROOT_STYLE = 'color-scheme:light dark;background:transparent'
 /** Largeur d'une carte d'agent selon la place : 1, 2 ou 3 par ligne. */
 export const cardWidth = (bodyColumns: number): '100%' | '50%' | '33%' => (bodyColumns < 64 ? '100%' : bodyColumns < 104 ? '50%' : '33%')
+/** Écart entre deux cartes d'agent, en cellules : une colonne à droite de chaque carte, une rangée entre deux lignes de cartes. */
+export const CARD_GAP = 1
 /** Géométrie de la barre, lue par scripts/measure-session-recap.mts : à garder synchrone avec progressSvg. */
 export const PROGRESS_GEOMETRY = { cell: SQ, pitch: SQ + GAP, rows: ROWS, trackY: TRACK_Y, trackH: TRACK_H, inset: INSET } as const
 
@@ -715,18 +727,22 @@ export const PROGRESS_GEOMETRY = { cell: SQ, pitch: SQ + GAP, rows: ROWS, trackY
  * au plein à droite (contre la pastille), quelques cellules fixes étincellent ; tant que le plan tourne, une
  * onde de couleurs plus ou moins claires naît contre la pastille et recule vers la gauche (SMIL), en
  * s'estompant avec le fondu. Les cellules ne bougent jamais, seule la couleur bouge.
- * Aucune graduation. Une zone de survol par étape (infobulle : nom et durée). La pastille de phase
+ * Aucune graduation. Une zone par étape avec `<title>` (infobulle, seulement là où le SVG est interactif). La pastille de phase
  * est unie, collée à l'avant du remplissage, qui s'arrête net à son bord gauche (rien dessous ni dans ses coins).
  * `uid` suffixe les ids quand plusieurs barres partagent un même document (page de test).
  */
 export function progressSvg(plan: Plan, width: number, now: number, uid = ''): string {
   const p = planProgress(plan)
   const pitch = SQ + GAP
-  const H = TRACK_H + TRACK_Y * 2 // 28, la pastille (24 px) dépasse la piste
+  const H = PROGRESS_HEIGHT // 28, la pastille (24 px) dépasse la piste
   const R = TRACK_H / 2 // arrondi de la piste et du remplissage : pilule
-  const W = Math.max(120, Math.floor(width))
+  const W = progressWidth(width)
   const live = plan.endedAt === undefined && plan.state === 'running'
-  const hex = stateHex(plan, now)
+  // couleurs finales dans le balisage ; le fondu d'état est une animation CSS posée tant qu'il dure, pour que
+  // la source reste identique d'un tic à l'autre (le cadre isolé du bureau se recharge à chaque changement de source)
+  const hex = STATE_HEX[plan.state]
+  const fading = plan.prevState !== undefined && plan.prevState !== plan.state && isFading(plan, now)
+  const prevHex = plan.prevState !== undefined ? STATE_HEX[plan.prevState] : hex
   const n = plan.steps.length
   // pastille : calculée d'abord, le fondu s'arrête à son bord gauche
   const label = p.stage.length > 12 ? `${p.stage.slice(0, 11)}…` : p.stage
@@ -802,7 +818,13 @@ export function progressSvg(plan: Plan, width: number, now: number, uid = ''): s
   // forme du remplissage : pilule à gauche, bord droit droit contre la pastille (calotte seule si très court)
   const fillShape = `<rect x="0" y="${TRACK_Y}" width="${clipW}" height="${TRACK_H}" rx="${R}"/>`
   const parts: string[] = []
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`)
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="${SVG_ROOT_STYLE}">`)
+  if (fading) {
+    const fade = (name: string, from: string, to: string) =>
+      `@keyframes ${name}${uid}{from{fill:${from}}}[fill="${to}"]{animation:${name}${uid} ${STATE_FADE_MS}ms ease-in-out both}`
+    // la pastille (hex) et les cellules (light, sparkHex) ont des teintes distinctes : un sélecteur par teinte
+    parts.push(`<style>${fade('h', prevHex, hex)}${fade('l', mix(prevHex, '#ffffff', 0.55), light)}${fade('s', mix(prevHex, '#ffffff', 0.7), sparkHex)}</style>`)
+  }
   parts.push(
     `<defs><clipPath id="c${uid}">${fillShape}</clipPath>` +
       // fondu statique : minimum à gauche (début), plein à droite contre la pastille ; l'onde y naît et s'estompe en reculant
@@ -836,7 +858,7 @@ export function progressSvg(plan: Plan, width: number, now: number, uid = ''): s
     const textColor = br * 0.299 + bg * 0.587 + bb * 0.114 > 130 ? '#16161a' : '#ffffff'
     parts.push(
       `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="${ph / 2}" fill="${hex}"/>` +
-        `<text x="${px + pw / 2}" y="${py + ph / 2 + 4.2}" font-size="12" font-weight="700" fill="${textColor}" text-anchor="middle" font-family="system-ui,sans-serif">${esc(label)}<title>${esc(`${plan.title || 'plan'} · ${duration((plan.endedAt ?? now) - plan.startedAt)}`)}</title></text>`,
+        `<text x="${px + pw / 2}" y="${py + ph / 2 + 4.2}" font-size="12" font-weight="700" fill="${textColor}" text-anchor="middle" font-family="system-ui,sans-serif">${esc(label)}<title>${esc(plan.endedAt !== undefined ? `${plan.title || 'plan'} · ${duration(plan.endedAt - plan.startedAt)}` : plan.title || 'plan')}</title></text>`,
     )
   }
   parts.push('</svg>')
@@ -900,31 +922,117 @@ export function progressCells(plan: Plan, columns: number, frame: number, now?: 
 
 // --- Mascotte (SVG pixel-art) -----------------------------------------------------------------
 
+/** Hauteur par défaut et largeur en px de la mascotte (grille 13 × 12,5). */
+export const CRAB_HEIGHT = 30
+export const crabWidth = (h = CRAB_HEIGHT): number => Math.round((h * 13) / 12.5)
+
 export type Tier = 'haiku' | 'sonnet' | 'opus' | 'fable'
 /** Rang d'un modèle d'après son identifiant ; inconnu : le plus simple. */
 export function tierOf(id: string): Tier {
   const m = /haiku|sonnet|opus|fable/i.exec(id)
   return (m?.[0].toLowerCase() as Tier | undefined) ?? 'haiku'
 }
-/** Un émoji par rang pour le terminal, de plus en plus évolué. */
-export const TIER_EMOJI: Record<Tier, string> = { haiku: '🦐', sonnet: '🦀', opus: '🦞', fable: '🐉' }
+
+/**
+ * Mascottes nommées. Un agent choisit la sienne par le champ `mascot` de son frontmatter (à côté de `model` et
+ * `effort`, que Claude Code ignore) ; sans champ, il porte le métier de son modèle.
+ */
+export const MASCOTS = ['scribe', 'chef', 'artiste', 'inspecteur', 'coursier', 'artisan', 'savant', 'mage', 'nu'] as const
+export type Mascot = (typeof MASCOTS)[number]
+const TIER_MASCOT: Record<Tier, Mascot> = { haiku: 'coursier', sonnet: 'artisan', opus: 'savant', fable: 'mage' }
+/** Un émoji par mascotte pour le terminal. */
+export const MASCOT_EMOJI: Record<Mascot, string> = {
+  scribe: '📜', chef: '🧠', artiste: '🎨', inspecteur: '🔍', coursier: '📦', artisan: '🔨', savant: '🎓', mage: '🔮', nu: '◦',
+}
+export const isMascot = (v: unknown): v is Mascot => typeof v === 'string' && (MASCOTS as readonly string[]).includes(v)
+/** La mascotte d'un agent : celle de sa définition, sinon le métier de son modèle. */
+export function mascotOf(r: { mascot?: string; model: string }): Mascot {
+  return isMascot(r.mascot) ? r.mascot : TIER_MASCOT[tierOf(r.model)]
+}
+
+/** `name` et `mascot` du frontmatter d'une définition d'agent (fichier `.md`), sans dépendre d'un parseur YAML. */
+export function agentFront(text: string): { name?: string; mascot?: Mascot } {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)
+  if (m === null) return {}
+  const field = (k: string) => new RegExp(`^${k}:[ \\t]*["']?([^"'#\\r\\n]*?)["']?[ \\t]*(?:#.*)?$`, 'm').exec(m[1]!)?.[1]
+  const name = field('name') || undefined
+  const mascot = field('mascot')
+  return { name, mascot: isMascot(mascot) ? mascot : undefined }
+}
+
+/** `installPath` de chaque plugin installé, par nom de plugin, lu dans `plugins/installed_plugins.json`. */
+export function installPathsOf(json: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  try {
+    const plugins = (JSON.parse(json) as { plugins?: Record<string, unknown> }).plugins ?? {}
+    for (const [key, v] of Object.entries(plugins)) {
+      const entries = (Array.isArray(v) ? v : [v]) as { installPath?: unknown }[]
+      const path = entries.find(x => typeof x?.installPath === 'string')?.installPath
+      if (typeof path === 'string') out[key.split('@')[0]!] ??= path
+    }
+  } catch {
+    // fichier absent ou d'un autre format : on se replie sur les autres emplacements
+  }
+  return out
+}
+
+/**
+ * Dossiers où chercher la définition d'un type d'agent, et le `name` à y trouver. `plugin:nom` : le dossier
+ * `agents/` du plugin installé, puis celui d'un plugin voisin du mod (repo de marketplace, `--plugin-dir`) ;
+ * `nom` seul : les agents du projet, puis ceux de l'utilisateur. Les types intégrés n'ont pas de fichier.
+ */
+export function agentDirs(
+  type: string,
+  ctx: { pluginRoot: string; configDir?: string; sessionRoot?: string; installPaths?: Record<string, string> },
+): { dir: string; name: string }[] {
+  const cut = type.indexOf(':')
+  if (cut > 0) {
+    const plugin = type.slice(0, cut)
+    const name = type.slice(cut + 1)
+    const dirs = [ctx.installPaths?.[plugin], `${ctx.pluginRoot.replace(/\/+$/, '').replace(/\/[^/]+$/, '')}/${plugin}`]
+    return dirs.filter((d): d is string => d !== undefined).map(d => ({ dir: `${d}/agents`, name }))
+  }
+  return [ctx.sessionRoot && `${ctx.sessionRoot}/.claude/agents`, ctx.configDir && `${ctx.configDir}/agents`]
+    .filter((d): d is string => typeof d === 'string' && d !== '')
+    .map(dir => ({ dir, name: type }))
+}
+
+/** Le dossier de configuration de Claude Code d'après le dossier d'un plugin installé (`…/plugins/cache/…`). */
+export function configDirOf(pluginRoot: string): string | undefined {
+  const at = pluginRoot.indexOf('/plugins/cache/')
+  return at > 0 ? pluginRoot.slice(0, at) : undefined
+}
+
+/** Enregistre la mascotte lue dans la définition d'un agent. */
+export function onMascot(s: Recap, e: { agentId: string; mascot: Mascot }): Recap {
+  const run = s.runs[e.agentId]
+  return run === undefined || run.mascot === e.mascot ? s : withRun(s, { ...run, mascot: e.mascot })
+}
+
+/** Gris de même luminance : la mascotte d'un agent inactif, accessoires compris. */
+function grey(hex: string): string {
+  const n = parseInt(hex.slice(1), 16)
+  const l = Math.round(0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255))
+  const v = l.toString(16).padStart(2, '0')
+  return `#${v}${v}${v}`
+}
 
 /**
  * Mascotte de Claude Code en pixel-art, grille 13 × 12 (affichée sur deux lignes) : corps, bras, yeux, quatre
- * pattes en bas, et une évolution par rang de modèle au-dessus — haiku : le crabe nu ; sonnet : reflet dans
- * les yeux et accessoire doré dans les pinces ; opus : couronne ; fable : grande couronne à gemme, accessoire et étincelles.
+ * pattes en bas, habillée selon `mascot` — scribe : capuche, plume et parchemin ; chef : toque à insigne cerveau,
+ * veste blanche à manches, foulard, cuillère en bois ; artiste : béret, palette, pinceau, taches de peinture ;
+ * inspecteur : casquette de détective, loupe, pipe qui fume (pour un agent de test ou de débogage) ;
+ * coursier : casquette, colis, pas pressé ; artisan : bandana, ceinture à outils, marteau ; savant : mortier,
+ * lunettes, nœud papillon, diplôme ; mage : chapeau étoilé, bâton à gemme, étincelles. Sans `mascot`, le métier
+ * du modèle `tier` ; sans l'un ni l'autre, la mascotte nue (emplacement à venir).
  */
-export function crabSvg(o: { height?: number; body?: string; eye?: string; animated?: boolean; tier?: Tier; mono?: boolean } = {}): string {
-  const h = o.height ?? 30
+export function crabSvg(o: { height?: number; body?: string; eye?: string; animated?: boolean; tier?: Tier; mascot?: Mascot; mono?: boolean } = {}): string {
+  const h = o.height ?? CRAB_HEIGHT
   const mono = o.mono === true // inactif : noir et blanc, accessoires compris
+  const c = (hex: string) => (mono ? grey(hex) : hex)
   const body = mono ? '#9a9a9a' : (o.body ?? '#d97757')
-  const eye = o.eye ?? '#1b1b1f'
-  const tier = o.tier ?? 'haiku'
-  const rank = ['haiku', 'sonnet', 'opus', 'fable'].indexOf(tier)
-  const gold = mono ? '#d4d4d4' : '#f5c542'
-  const gem = mono ? '#5c5c5c' : '#8b5cf6'
-  const white = '#ffffff'
-  const OY = 5 // le crabe occupe les rangées 5 à 11, les ornements les rangées 0 à 4
+  const eye = c(o.eye ?? '#1b1b1f')
+  const OY = 5 // le corps occupe les rangées 5 à 11, chapeaux et objets les rangées 0 à 6
   const px = (x: number, y: number, w = 1, hh = 1, fill = body) => `<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="${fill}"/>`
   const parts = [
     px(2, OY, 9, 5), // corps
@@ -934,24 +1042,98 @@ export function crabSvg(o: { height?: number; body?: string; eye?: string; anima
     px(5, OY + 5, 1, 2),
     px(7, OY + 5, 1, 2),
     px(9, OY + 5, 1, 2), // pattes
-    px(4, OY + 1, 1, 2, eye),
-    px(8, OY + 1, 1, 2, eye), // yeux
   ]
-  if (rank >= 1) {
-    parts.push(px(4, OY + 1, 1, 1, white), px(8, OY + 1, 1, 1, white)) // reflet dans les yeux
-  }
-  const hands = () => parts.push(px(0, OY - 1, 2, 1, gold), px(11, OY - 1, 2, 1, gold), px(0, OY, 1, 2, gold), px(12, OY, 1, 2, gold)) // accessoire tenu dans les pinces
-  if (rank === 1) hands()
-  if (rank === 2) {
-    parts.push(px(4, OY - 2, 5, 2, gold), px(4, OY - 3, 1, 1, gold), px(6, OY - 4, 1, 2, gold), px(8, OY - 3, 1, 1, gold)) // couronne
-  }
-  if (rank === 3) {
-    parts.push(px(3, OY - 2, 7, 2, gold), px(3, OY - 4, 1, 2, gold), px(6, OY - 5, 1, 3, gold), px(9, OY - 4, 1, 2, gold), px(6, OY - 2, 1, 1, gem)) // grande couronne, gemme
-    hands()
-    parts.push(px(1, OY - 4, 1, 1, white), px(11, OY - 5, 1, 1, white), px(12, OY - 3, 1, 1, white)) // étincelles
+  const eyes = () => parts.push(px(4, OY + 1, 1, 2, eye), px(8, OY + 1, 1, 2, eye))
+  const white = c('#f4f4f4')
+  const gold = c('#f5c542')
+  const red = c('#d83a3a')
+  const wood = c('#8b5a2b')
+  const design: Mascot = o.mascot ?? (o.tier !== undefined ? TIER_MASCOT[o.tier] : 'nu')
+  switch (design) {
+    case 'scribe': {
+      // capuche de copiste, plume dans la pince droite, parchemin roulé dans la pince gauche
+      const hood = c('#6b4a2b')
+      parts.push(px(4, 2, 5, 1, hood), px(3, 3, 7, 1, hood), px(2, 4, 9, 1, c('#8a6240')))
+      parts.push(px(12, 0, 1, 1, white), px(11, 1, 2, 2, white), px(12, 1, 1, 2, c('#cfcfcf')), px(11, 3, 1, 1, white), px(11, 4, 1, 2, c('#3a3a3a')), px(11, 6, 1, 1, c('#2b4fc7')))
+      const roll = c('#c9a86a')
+      parts.push(px(0, 2, 2, 4, c('#f3e3b5')), px(0, 1, 2, 1, roll), px(0, 6, 2, 1, roll), px(0, 3, 1, 1, c('#6b4a2b')), px(1, 4, 1, 1, c('#6b4a2b')))
+      eyes()
+      break
+    }
+    case 'chef': {
+      // le chef de la brigade : toque à insigne cerveau, veste blanche à manches et foulard rouge en pointe, cuillère en bois levée
+      const toque = c('#f7f7f7')
+      parts.push(px(4, 0, 5, 1, toque), px(3, 1, 7, 1, toque), px(4, 2, 5, 2, toque), px(3, 4, 7, 1, c('#dcdcdc')))
+      parts.push(px(5, 2, 3, 2, c('#f08bb0')), px(6, 2, 1, 2, c('#c9567f')))
+      parts.push(px(2, OY + 3, 9, 2, toque), px(0, OY + 2, 2, 2, toque), px(11, OY + 2, 2, 2, toque)) // veste et manches
+      parts.push(px(5, OY + 3, 3, 1, red), px(6, OY + 4, 1, 1, red), px(4, OY + 4, 1, 1, c('#bdbdbd')), px(8, OY + 4, 1, 1, c('#bdbdbd'))) // foulard, boutons
+      parts.push(px(11, 0, 2, 2, c('#b07a43')), px(12, 2, 1, 5, wood))
+      eyes()
+      break
+    }
+    case 'artiste': {
+      // béret rouge de travers, palette dans la pince gauche, pinceau trempé dans la droite, taches de peinture
+      const beret = c('#c0392b')
+      parts.push(px(8, 2, 1, 1, beret), px(3, 3, 7, 1, beret), px(2, 4, 7, 1, beret))
+      parts.push(px(0, 3, 2, 3, c('#c8a26b')), px(0, 3, 1, 1, c('#e74c3c')), px(1, 4, 1, 1, c('#2f7de1')), px(0, 5, 1, 1, c('#f5c542')))
+      parts.push(px(12, 0, 1, 1, c('#2f7de1')), px(12, 1, 1, 1, c('#9aa3ad')), px(12, 2, 1, 5, c('#26262b')))
+      parts.push(px(3, OY + 4, 1, 1, c('#2f7de1')), px(9, OY + 3, 1, 1, c('#f5c542')))
+      eyes()
+      break
+    }
+    case 'inspecteur': {
+      // casquette de détective en tweed et son nœud, loupe dans la pince droite, pipe qui fume dans la gauche
+      const tweed = c('#8a6a3f')
+      const check = c('#6b5130')
+      parts.push(px(6, 1, 1, 1, check), px(4, 2, 5, 1, tweed), px(3, 3, 7, 1, tweed), px(2, 4, 9, 1, tweed))
+      parts.push(px(5, 2, 1, 1, check), px(7, 2, 1, 1, check), px(4, 3, 1, 1, check), px(6, 3, 1, 1, check), px(8, 3, 1, 1, check), px(3, 4, 1, 1, check), px(9, 4, 1, 1, check))
+      const rim = c('#26262b')
+      parts.push(px(11, 0, 2, 1, rim), px(11, 1, 2, 2, c('#cfe8ff')), px(11, 3, 2, 1, rim), px(12, 4, 1, 3, wood))
+      parts.push(px(0, 4, 1, 2, c('#5a3a1a')), px(1, 6, 1, 1, c('#3a2a1a')), px(0, 2, 1, 1, c('#bdbdbd')), px(1, 1, 1, 1, c('#d9d9d9')))
+      eyes()
+      break
+    }
+    case 'coursier': {
+      // le coursier : casquette de face (calotte, logo, visière), colis dans la pince droite
+      const cap = c('#2f7de1')
+      parts.push(px(4, 2, 5, 1, cap), px(3, 3, 7, 1, cap), px(6, 3, 1, 1, white), px(1, 4, 11, 1, c('#1f5fb3')))
+      parts.push(px(11, 5, 2, 2, c('#c08a4a')), px(11, 5, 1, 2, c('#e8c48a')))
+      eyes()
+      break
+    }
+    case 'artisan': {
+      // l'artisan : bandana à pois, ceinture à outils et sa boucle, marteau dans la pince droite
+      parts.push(px(2, 4, 9, 1, red), px(4, 4, 1, 1, white), px(8, 4, 1, 1, white))
+      parts.push(px(2, OY + 4, 9, 1, c('#7a4a2a')), px(6, OY + 4, 1, 1, gold), px(3, OY + 4, 1, 1, c('#9aa3ad')), px(9, OY + 4, 1, 1, c('#9aa3ad')))
+      parts.push(px(10, 2, 3, 1, c('#9aa3ad')), px(12, 3, 1, 4, wood))
+      eyes()
+      break
+    }
+    case 'savant': {
+      // le savant : mortier et gland doré, lunettes, nœud papillon, diplôme dans la pince droite
+      const ink = c('#26262b')
+      parts.push(px(3, 2, 7, 1, ink), px(1, 3, 11, 1, ink), px(4, 4, 5, 1, ink), px(10, 4, 1, 1, gold))
+      const lens = c('#cfe8ff')
+      parts.push(px(3, OY + 1, 3, 2, lens), px(7, OY + 1, 3, 2, lens), px(6, OY + 1, 1, 1, ink), px(3, OY + 2, 3, 1, c('#8fb8e0')), px(7, OY + 2, 3, 1, c('#8fb8e0')))
+      eyes()
+      parts.push(px(5, OY + 4, 1, 1, red), px(7, OY + 4, 1, 1, red), px(6, OY + 4, 1, 1, c('#8b1e1e')))
+      parts.push(px(11, 4, 2, 3, c('#f3ead2')), px(11, 5, 2, 1, red))
+      break
+    }
+    case 'mage': {
+      // le mage : chapeau pointu étoilé, bâton à gemme dans la pince droite, étincelles
+      const hat = c('#6d4ac7')
+      parts.push(px(7, 0, 1, 1, hat), px(6, 1, 2, 1, hat), px(5, 2, 3, 1, hat), px(4, 3, 5, 1, hat), px(2, 4, 9, 1, c('#4d2f9e')), px(6, 3, 1, 1, gold))
+      parts.push(px(12, 2, 1, 5, wood), px(11, 0, 2, 2, c('#8b5cf6')), px(12, 0, 1, 1, c('#c4b5fd')))
+      parts.push(px(9, 0, 1, 1, white), px(3, 1, 1, 1, white))
+      eyes()
+      break
+    }
+    default:
+      eyes()
   }
   const bob = o.animated
-    ? `<animateTransform attributeName="transform" type="translate" values="0 0;0 -0.5;0 0" dur="0.7s" repeatCount="indefinite"/>`
+    ? `<animateTransform attributeName="transform" type="translate" values="0 0;0 -0.5;0 0" dur="${design === 'coursier' ? '0.35s' : '0.7s'}" repeatCount="indefinite"/>`
     : ''
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round((h * 13) / 12.5)}" height="${h}" viewBox="0 -0.5 13 12.5" shape-rendering="crispEdges"><g>${bob}${parts.join('')}</g></svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${crabWidth(h)}" height="${h}" style="${SVG_ROOT_STYLE}" viewBox="0 -0.5 13 12.5" shape-rendering="crispEdges"><g>${bob}${parts.join('')}</g></svg>`
 }

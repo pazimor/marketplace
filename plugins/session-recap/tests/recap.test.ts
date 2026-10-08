@@ -119,7 +119,7 @@ describe('modèle du récap', () => {
   })
 })
 
-import { BRAILLE_TRACK, crabSvg, progressCells, progressSvg, duration, isScribe, stateHex, STATE_FADE_MS, onPlan, onPlanStep, onToolUse, planProgress, stripRuns, table } from '../hooks/recap'
+import { BRAILLE_TRACK, crabSvg, mascotOf, agentFront, installPathsOf, agentDirs, configDirOf, onMascot, onSpawn as spawnRun, emptyRecap as fresh, MASCOT_EMOJI, progressCells, progressSvg, duration, isScribe, stateHex, STATE_FADE_MS, onPlan, onPlanStep, onToolUse, planProgress, stripRuns, table } from '../hooks/recap'
 
 test('agent principal : nommé, ou déduit du lancement de l\'orchestrateur', () => {
   let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: 'default', model: 'm', at: 0 })
@@ -278,11 +278,80 @@ test('carrés fixes : 5 rangées, fondu statique gauche→droite, onde de couleu
   expect(front).toBeGreaterThan(back)
 })
 
+test('bureau : source SVG identique d\u2019un tic à l\u2019autre (le cadre isolé se recharge sinon), fond transparent', () => {
+  let s = onPlan(emptyRecap(), { title: 'L', stages: [{ name: 'Lire', steps: ['a', 'b'] }], at: 0 })
+  s = onPlanStep(s, { step: 'a', status: 'done', at: 5000 })
+  expect(progressSvg(s.plan!, 300, 9000)).toBe(progressSvg(s.plan!, 300, 9250))
+  expect(progressSvg(s.plan!, 300, 9000)).toBe(progressSvg(s.plan!, 300, 61000))
+  expect(progressSvg(s.plan!, 300, 9000)).toContain('color-scheme:light dark')
+  expect(crabSvg()).toContain('color-scheme:light dark')
+  // fondu d'état : animation CSS, même source pendant tout le fondu, retirée ensuite
+  const w = onPlanStep(s, { state: 'input', note: 'x', at: 10000 })
+  const during = progressSvg(w.plan!, 300, 10000)
+  expect(during).toContain('@keyframes')
+  expect(progressSvg(w.plan!, 300, 10000 + STATE_FADE_MS / 2)).toBe(during)
+  expect(progressSvg(w.plan!, 300, 10000 + STATE_FADE_MS)).not.toContain('@keyframes')
+})
+
 test('mascotte : SVG pixel-art, animée seulement si demandé', () => {
   expect(crabSvg()).toContain('viewBox')
   expect(crabSvg()).not.toContain('animateTransform')
   expect(crabSvg({ animated: true })).toContain('animateTransform')
   expect(crabSvg({ body: '#ef4444' })).toContain('#ef4444')
+})
+
+test('mascotte : une tenue par mascotte nommée, le métier du modèle par défaut, gris une fois inactive', () => {
+  const costume = { haiku: '#2f7de1', sonnet: '#d83a3a', opus: '#26262b', fable: '#6d4ac7' } as const
+  for (const [tier, hex] of Object.entries(costume)) {
+    expect(crabSvg({ tier: tier as keyof typeof costume })).toContain(hex)
+    expect(crabSvg()).not.toContain(hex)
+  }
+  expect(crabSvg({ tier: 'haiku', animated: true })).toContain('dur="0.35s"')
+  expect(crabSvg({ tier: 'opus', animated: true })).toContain('dur="0.7s"')
+  // une mascotte nommée l'emporte sur le modèle
+  expect(crabSvg({ tier: 'opus', mascot: 'scribe' })).toContain('#6b4a2b')
+  expect(crabSvg({ tier: 'opus', mascot: 'scribe' })).not.toContain(costume.opus)
+  expect(crabSvg({ tier: 'haiku', mascot: 'chef' })).toContain('#f08bb0')
+  expect(crabSvg({ tier: 'sonnet', mascot: 'artiste' })).toContain('#c0392b')
+  expect(crabSvg({ tier: 'sonnet', mascot: 'inspecteur' })).toContain('#8a6a3f')
+  expect(MASCOT_EMOJI.inspecteur).toBe('🔍')
+  expect(crabSvg({ mascot: 'coursier' })).toBe(crabSvg({ tier: 'haiku' }))
+  expect(mascotOf({ model: 'claude-sonnet-5-5' })).toBe('artisan')
+  expect(mascotOf({ model: 'claude-sonnet-5-5', mascot: 'chef' })).toBe('chef')
+  expect(mascotOf({ model: 'claude-opus-5-5', mascot: 'licorne' })).toBe('savant')
+  expect(MASCOT_EMOJI.artiste).toBe('🎨')
+  const fills = [crabSvg({ mascot: 'chef', mono: true }), crabSvg({ mascot: 'scribe', mono: true }), crabSvg({ mascot: 'artiste', mono: true }), crabSvg({ mascot: 'inspecteur', mono: true }), crabSvg({ tier: 'fable', mono: true })]
+    .flatMap(svg => [...svg.matchAll(/fill="#(..)(..)(..)"/g)])
+  expect(fills.length).toBeGreaterThan(0)
+  for (const [, r, g, b] of fills) expect(r === g && g === b).toBe(true)
+})
+
+test('mascotte déclarée : lue dans le frontmatter de la définition, gardée à la reprise', () => {
+  expect(agentFront('---\nname: orchestrateur\ndescription: >-\n  x\nmodel: haiku\nmascot: chef # du bandeau\n---\nCorps\nmascot: artiste\n'))
+    .toEqual({ name: 'orchestrateur', mascot: 'chef' })
+  expect(agentFront('---\nname: x\nmascot: "scribe"\n---\n')).toEqual({ name: 'x', mascot: 'scribe' })
+  expect(agentFront('---\nname: x\nmascot: licorne\n---\n')).toEqual({ name: 'x', mascot: undefined })
+  expect(agentFront('pas de frontmatter')).toEqual({})
+  const installed = JSON.stringify({ version: 2, plugins: { 'orchestration@marketplace': [{ scope: 'user', installPath: '/h/.claude/plugins/cache/marketplace/orchestration/0.9.0' }] } })
+  expect(installPathsOf(installed)).toEqual({ orchestration: '/h/.claude/plugins/cache/marketplace/orchestration/0.9.0' })
+  expect(installPathsOf('pas du json')).toEqual({})
+  const root = '/h/.claude/plugins/cache/marketplace/session-recap/0.8.0'
+  expect(configDirOf(root)).toBe('/h/.claude')
+  expect(configDirOf('/repo/plugins/session-recap')).toBeUndefined()
+  expect(agentDirs('orchestration:scribe', { pluginRoot: '/repo/plugins/session-recap', installPaths: installPathsOf(installed) })).toEqual([
+    { dir: '/h/.claude/plugins/cache/marketplace/orchestration/0.9.0/agents', name: 'scribe' },
+    { dir: '/repo/plugins/orchestration/agents', name: 'scribe' },
+  ])
+  expect(agentDirs('relecteur', { pluginRoot: root, configDir: '/h/.claude', sessionRoot: '/p' })).toEqual([
+    { dir: '/p/.claude/agents', name: 'relecteur' },
+    { dir: '/h/.claude/agents', name: 'relecteur' },
+  ])
+  let s = spawnRun(fresh(), { agentId: 'a1', agent: 'orchestration:scribe', model: 'claude-haiku-5-5', fork: false, at: 1 })
+  s = onMascot(s, { agentId: 'a1', mascot: 'scribe' })
+  expect(mascotOf(s.runs['a1']!)).toBe('scribe')
+  s = spawnRun(s, { agentId: 'a1', agent: 'orchestration:scribe', model: 'claude-haiku-5-5', fork: false, at: 2 })
+  expect(s.runs['a1']!.mascot).toBe('scribe')
+  expect(onMascot(s, { agentId: 'inconnu', mascot: 'chef' })).toBe(s)
 })
 
 test('changement d\u2019état : la couleur fond de l\u2019ancienne à la nouvelle', () => {

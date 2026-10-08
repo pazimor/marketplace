@@ -1,6 +1,6 @@
 {
   "name": "session-recap",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Mod récap de session (Claude Code 2.1.287, API des Mods en early access) : agent de démarrage, timeline des agents par prompt (neufs, repris, forkés), modèle résolu et effort de chacun, tokens par agent × modèle × effort, limites 5 h / 7 jours avec prévision, alertes. Lecture seule : n'altère ni ne bloque rien.",
   "author": {
     "name": "eddy-hummel",

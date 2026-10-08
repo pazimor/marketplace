@@ -5,12 +5,12 @@
     "email": "eddy.hummel@gmail.com"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a session-recap mod, for Claude Code",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "plugins": [
     {
       "name": "orchestration",
       "source": "./plugins/orchestration",
-      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap; the `orchestrateur` scopes, delegates each task to an executor at the right reasoning effort, verifies on return and reports back; executors code. Each agent pins its own model in its file; an optional advisor corrects the smaller executors. No MCP server required"
+      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrateur` scopes, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code. No MCP server required"
     },
     {
       "name": "level-design",
@@ -20,7 +20,7 @@
     {
       "name": "session-recap",
       "source": "./plugins/session-recap",
-      "description": "Session recap mod (function hooks, tested on Claude Code 2.1.287; the mods API is early access): a live band (plan progress bar, workflow phases, one card per running agent with a model-tier icon), a pane (/session-recap) with a per-prompt timeline of subagents (new, resumed, forked), each agent's resolved model and effort, tokens by agent × model × effort, and the 5-hour / 7-day limits with a forecast; toasts warn on limit thresholds, token budgets, an unexpected model or a main agent eating the session. Read-only: it never blocks or rewrites anything"
+      "description": "Session recap mod (function hooks, tested on Claude Code 2.1.287; the mods API is early access): a live band (plan progress bar, workflow phases, one card per running agent with a mascot dressed for its role or its model), a pane (/session-recap) with a per-prompt timeline of subagents (new, resumed, forked), each agent's resolved model and effort, tokens by agent × model × effort, and the 5-hour / 7-day limits with a forecast; toasts warn on limit thresholds, token budgets, an unexpected model or a main agent eating the session. Read-only: it never blocks or rewrites anything"
     }
   ]
 }

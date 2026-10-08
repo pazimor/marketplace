@@ -86,8 +86,10 @@ canon.
 **Ajouter une entrée** — choisir le fichier thématique, prendre le prochain
 `CANON:n` libre sur tout le dossier, écrire une ligne à la grammaire ci-dessus.
 Point venu de l'utilisateur (dit ou validé dans la conversation) → `[USER:<nom>]`.
-Point constaté en travaillant → `[MODEL]`. Ne jamais toucher aux entrées
-voisines au passage.
+Point constaté en travaillant → `[MODEL]`. Une entrée `[USER]` ne porte que ce
+que l'utilisateur a dit ou validé : les détails repris d'une autre entrée ou
+constatés en travaillant vont dans une entrée `[MODEL]` séparée qui la cite.
+Ne jamais toucher aux entrées voisines au passage.
 
 **Promouvoir `[MODEL]` → `[USER:<nom>]`** — uniquement après une confirmation
 explicite de l'utilisateur sur ce point précis (« oui, c'est bien la règle »).

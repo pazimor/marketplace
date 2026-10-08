@@ -259,17 +259,11 @@ class TestFrontmatter(Base):
         self.fx.replace(self.AGENT_PATH, "model: sonnet", 'model: "haiku"')
         self.assertEqual(self.run_validate().findings, [])
 
-    def test_forbidden_model(self):
-        for model in ("fable", "claude-fable-5-1"):
-            with self.subTest(model=model):
-                self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("model: sonnet", f"model: {model}"))
-                self.assertError("frontmatter.model-forbidden")
-
-    def test_agent_without_model_warns(self):
-        for line in ("", "model: inherit\n"):
+    def test_agent_without_model_ok(self):
+        for line in ("", "model: inherit\n", "model: fable\n"):
             with self.subTest(line=line):
                 self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("model: sonnet\n", line))
-                self.assertWarning("frontmatter.model-missing")
+                self.assertEqual(self.run_validate().findings, [])
 
     def test_skill_without_model_ok(self):
         self.assertNotIn("model:", self.fx.read(self.SKILL_PATH))
@@ -301,6 +295,12 @@ class TestFrontmatter(Base):
     def test_bad_effort(self):
         self.fx.replace(self.AGENT_PATH, "effort: high", "effort: extreme")
         self.assertError("frontmatter.effort")
+
+    def test_mascot_known_ok_unknown_warns(self):
+        self.fx.replace(self.AGENT_PATH, "effort: high", "effort: high\nmascot: chef")
+        self.assertEqual(self.run_validate().findings, [])
+        self.fx.replace(self.AGENT_PATH, "mascot: chef", "mascot: licorne")
+        self.assertWarning("frontmatter.mascot")
 
     def test_plugin_agent_ignored_fields_warn(self):
         for key in ("hooks", "mcpServers", "permissionMode"):

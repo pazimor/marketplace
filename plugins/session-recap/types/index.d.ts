@@ -19,6 +19,7 @@ export type AgentRun = {
   task?: string // description de la tâche confiée (`agent.spawn`)
   stepIndex?: number // étape du plan en cours au lancement (index dans `plan.steps`)
   tool?: string // dernier outil appelé par cet agent (`tool.call`)
+  mascot?: string // mascotte lue dans le frontmatter de sa définition (`mascot:`), absente = métier du modèle
   resumes: number
   startedAt: number
   endedAt?: number

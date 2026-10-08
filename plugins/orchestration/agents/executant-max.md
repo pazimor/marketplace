@@ -2,11 +2,12 @@
 name: executant-max
 description: >-
   Exécutant d'un brief de tâche scopée, effort de raisonnement « max » — dernier recours, après l'échec d'une tentative xhigh ou quand l'erreur coûterait très cher.
-  Appelé par l'agent orchestrateur (qui choisit l'effort ; le modèle est fixé ici), jamais directement
+  Appelé par l'agent orchestrateur (qui choisit l'effort et le modèle), jamais directement
   par l'utilisateur : ne pas sélectionner cet agent de sa propre initiative.
-model: sonnet
-# Le modèle ne se nomme qu'ici (CANON:22) ; un advisor configuré le corrige en cours de tâche.
+# Pas de `model` : l'orchestrateur le passe à l'appel, sinon hérite de son appelant (CANON:35).
 effort: max
+# Outils intégrés inutiles à un exécutant : ils alourdissent le préfixe de chaque lancement (CANON:34).
+disallowedTools: Agent, Artifact, SendUserFile, SuggestPluginInstall, SuggestSkills, SearchPlugins
 ---
 
 # Exécutant (max) — exécuter le brief, rien que le brief

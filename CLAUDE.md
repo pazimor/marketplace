@@ -36,6 +36,8 @@ plugins/session-recap/              # Mod (function hooks, API en early access, 
 .claude/types/                      # déclarations du moteur (2.1.287), régénérées à chaque version
 docs/plan-session-recap.md          # plan et constats du Mod (prérequis, phases, hypothèses)
 docs/grammar.md                     # grammaire canon + roadmap en EBNF (décrit les SKILL.md, n'en décide pas)
+docs/mascots-preview.{html,png}     # mascottes du bandeau (scripts/preview-mascots.mts)
+bench/                              # bancs de délégation rejouables (exécutants, scribe) et leurs relevés
 scripts/validate.py                 # validateur stdlib : manifestes, frontmatter, canon, roadmap
 scripts/tests/                      # tests du validateur (unittest)
 .github/workflows/ci.yml            # CI : validate + smoke test d'installation du plugin
@@ -65,9 +67,11 @@ authentification n'est requise.
   canon/roadmap changée ou agent/skill retiré) **et** ajouter une entrée dans `CHANGELOG.md`.
   Un changement du catalogue augmente aussi `version` dans `.claude-plugin/marketplace.json`.
   Lancer `python3 scripts/validate.py .` avant de commiter.
-- **Modèles (`CANON:22`).** Un modèle ne se nomme que sur la ligne `model:` du frontmatter
-  de l'agent — jamais dans le texte des agents, skills, manifestes, README ou ce fichier.
-  La gamme la plus coûteuse est interdite ; `validate.py` refuse les deux écarts.
+- **Modèles (`CANON:35`, `CANON:32`).** Seul le `scribe` fixe son `model` (le plus économe) ;
+  l'orchestrateur hérite du modèle de la session et passe celui de chaque exécutant à l'appel,
+  en partant du plus économe qu'un critère indépendant peut vérifier. Un modèle ne se nomme que sur la ligne `model:` du frontmatter
+  d'un agent — jamais dans le texte des agents, skills, manifestes, README ou ce fichier
+  (`validate.py` le refuse).
 - **Rester générique (`CANON:8`).** Aucun projet ni outil particulier (Unity, prefab…) dans
   les agents et skills distribués : ces détails vivent dans le canon du projet utilisateur.
 - **Les grammaires appartiennent aux SKILL.md (`CANON:3`).** Si une règle de grammaire change,
@@ -76,8 +80,8 @@ authentification n'est requise.
   `— obsolète AAAA-MM-JJ : <raison>`. Une entrée `[USER]` ne se déprécie que sur décision de
   l'utilisateur.
 - **Agents de plugin** : `hooks`, `mcpServers` et `permissionMode` sont ignorés dans leur
-  frontmatter. L'effort se fixe par `effort` dans le frontmatter (l'Agent tool ne le prend pas
-  à l'appel), ou par `opts.effort` dans un workflow (`CANON:11`).
+  frontmatter. L'effort se fixe par `effort` dans le frontmatter, ou par `opts.effort` dans un
+  workflow (`CANON:11`) ; l'Agent tool ne prend `effort` à l'appel que depuis 2.1.293 (`CANON:39`).
 - Skills et agents en français, ton directif ; README en anglais (`CANON:1`).
 - Aucune dépendance à GitHub ou à un service tiers dans les mécanismes du plugin (`CANON:5`) ;
   la CI GitHub Actions n'est que de l'outillage du repo.
