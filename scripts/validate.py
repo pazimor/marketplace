@@ -215,9 +215,11 @@ def check_manifests(report: Report, root: Path) -> None:
 
 MODEL_ALIASES = {"opus", "sonnet", "haiku", "fable", "inherit"}
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
-# Les modèles ne se nomment que sur la ligne `model:` du frontmatter d'un agent (`CANON:30`).
+# Les modèles ne se nomment que sur la ligne `model:` du frontmatter d'un agent (`CANON:35`).
 MODEL_NAME_RE = re.compile(r"\b(opus|sonnet|haiku|fable)\b", re.IGNORECASE)
 PLUGIN_AGENT_IGNORED = ("hooks", "mcpServers", "permissionMode")
+# Mascottes du bandeau session-recap (`MASCOTS` de plugins/session-recap/hooks/recap.ts) ; Claude Code ignore le champ.
+MASCOTS = {"scribe", "chef", "artiste", "inspecteur", "coursier", "artisan", "savant", "mage", "nu"}
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 FM_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)\s*:(?:\s+(.*?))?\s*$")
 
@@ -307,6 +309,11 @@ def check_frontmatter_file(report: Report, path: Path, kind: str) -> None:
         if effort not in EFFORTS:
             report.error("frontmatter.effort", path, line,
                          f"`effort` invalide : {effort!r} (attendu {sorted(EFFORTS)})")
+    if kind == "agent" and "mascot" in data:
+        mascot, line = data["mascot"]
+        if mascot not in MASCOTS:
+            report.warn("frontmatter.mascot", path, line,
+                        f"`mascot` inconnue : {mascot!r} (attendu {sorted(MASCOTS)}) — le bandeau prendra le métier du modèle")
     if kind == "agent":
         for key in PLUGIN_AGENT_IGNORED:
             if key in data:
@@ -336,7 +343,7 @@ def check_model_mentions(report: Report, root: Path) -> None:
             m = MODEL_NAME_RE.search(line)
             if m:
                 report.error("plugin.model-mention", path, n,
-                             f"modèle nommé hors du frontmatter d'agent : {m.group(0)!r} (`CANON:30`)")
+                             f"modèle nommé hors du frontmatter d'agent : {m.group(0)!r} (`CANON:35`)")
 
 
 # ---------------------------------------------------------------------------------------------

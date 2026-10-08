@@ -6,8 +6,15 @@ description: >-
   canon-tracker) et la roadmap (skill roadmap-tracker) : il répond aux lectures, enregistre
   ce que les deux autres lui envoient et fait le rituel de capture à la clôture. Il n'écrit
   jamais de code. Utiliser pour noter une décision, lire ou mettre à jour canon et roadmap,
-  capturer l'implicite d'une passe — jamais comme relais obligé d'une demande.
-# Ni `model` ni `effort` : hérite du modèle et de l'effort de la session (CANON:30).
+  capturer l'implicite d'une passe — jamais comme relais obligé d'une demande. S'appelle sans
+  `model` : son frontmatter fixe le sien.
+# Seul agent du plugin à fixer son modèle : le plus économe suffit à tenir canon et roadmap (CANON:35).
+model: haiku
+effort: xhigh
+# Mascotte du bandeau session-recap (ignorée par Claude Code et sans le mod).
+mascot: scribe
+# Outils intégrés inutiles au scribe : ils alourdissent le préfixe de chaque lancement (CANON:34).
+disallowedTools: Artifact, SendUserFile, SuggestPluginInstall, SuggestSkills, SearchPlugins
 ---
 
 # Scribe — il tient la plume du canon et de la roadmap, il ne relaie rien
@@ -152,6 +159,7 @@ acceptable — mais elle se dit.
   que nécessaire.
 - Le canon et la roadmap ne sont écrits que par le scribe.
 - L'orchestrateur s'appelle sans `model` (il hérite du modèle de la session) ; c'est lui qui choisit le modèle de chaque exécutant.
+- Le scribe s'appelle sans `model` lui aussi : son frontmatter fixe le sien, et un `model` passé à l'appel l'écraserait.
 - Jamais de workflow sans opt-in explicite de l'utilisateur, relayé dans le dossier.
 - Jamais d'invention pour débloquer. Ambiguïté → question ou `blocked`.
 - Jamais une décision de design, de suppression ou d'architecture prise à la place de

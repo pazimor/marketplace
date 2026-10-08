@@ -4,8 +4,10 @@ description: >-
   Exécutant d'un brief de tâche scopée, effort de raisonnement « xhigh » — architecture, audit, migration longue, bug introuvable.
   Appelé par l'agent orchestrateur (qui choisit l'effort et le modèle), jamais directement
   par l'utilisateur : ne pas sélectionner cet agent de sa propre initiative.
-# Pas de `model` : l'orchestrateur le passe à l'appel, sinon hérite de son appelant (CANON:30).
+# Pas de `model` : l'orchestrateur le passe à l'appel, sinon hérite de son appelant (CANON:35).
 effort: xhigh
+# Outils intégrés inutiles à un exécutant : ils alourdissent le préfixe de chaque lancement (CANON:34).
+disallowedTools: Agent, Artifact, SendUserFile, SuggestPluginInstall, SuggestSkills, SearchPlugins
 ---
 
 # Exécutant (xhigh) — exécuter le brief, rien que le brief

@@ -216,8 +216,9 @@ Ne concernent que le repo du marketplace ; ignorés ailleurs.
 | `frontmatter.syntax` | ERROR | `plugins/*/agents/*.md` et `plugins/*/skills/*/SKILL.md` commencent par un frontmatter `---` … `---` lisible |
 | `frontmatter.name` / `frontmatter.description` | ERROR | Champs présents et non vides |
 | `frontmatter.model` | ERROR | `model` ∈ {`opus`, `sonnet`, `haiku`, `fable`, `inherit`} ou ID `claude-*` |
-| `plugin.model-mention` | ERROR | Nom de modèle (`opus`, `sonnet`, `haiku`, `fable`, mot entier, casse ignorée) dans un `.md` ou `.json` sous `plugins/`, hors de la ligne `model:` d'un frontmatter d'agent (`CANON:30`) |
+| `plugin.model-mention` | ERROR | Nom de modèle (`opus`, `sonnet`, `haiku`, `fable`, mot entier, casse ignorée) dans un `.md` ou `.json` sous `plugins/`, hors de la ligne `model:` d'un frontmatter d'agent (`CANON:35`) |
 | `frontmatter.effort` | ERROR | `effort` ∈ {`low`, `medium`, `high`, `xhigh`, `max`} (`CANON:11`) |
+| `frontmatter.mascot` | WARN | `mascot` d'un agent ∈ {`scribe`, `chef`, `artiste`, `inspecteur`, `coursier`, `artisan`, `savant`, `mage`, `nu`} : mascotte du bandeau `session-recap`, que Claude Code ignore |
 | `frontmatter.plugin-agent-ignored` | WARN | `hooks`, `mcpServers`, `permissionMode` dans un agent de plugin : ignorés par Claude Code (`CANON:11`) |
 | `frontmatter.name-format` / `frontmatter.name-dir` | WARN | `name` en kebab-case ; `name` d'un skill = nom de son dossier |
 

@@ -1,10 +1,16 @@
 {
   "name": "level-design",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Goût et méthode de level design 3D pour Claude Code — lecture du brief, curseurs, anti-défauts de l'IA, pre-flight mesurable (skill level-design-taste), procédure de construction spec → passe idempotente → audit → captures (skill level-design-build) et l'agent level-design-reviewer qui juge sur captures. Indépendant du moteur : les spécificités vivent dans le canon du projet.",
   "author": {
     "name": "eddy-hummel",
     "email": "eddy.hummel@gmail.com"
   },
-  "keywords": ["level-design", "3d", "game", "review", "taste"]
+  "keywords": [
+    "level-design",
+    "3d",
+    "game",
+    "review",
+    "taste"
+  ]
 }

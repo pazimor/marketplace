@@ -3,6 +3,8 @@ name: level-design-reviewer
 description: Reviewer critique de level design 3D à partir de captures d'écran — arène, map extérieure, salle, couloir ou toute scène jouable. Invoquer avec la liste des chemins de captures (légendées si possible) et, s'il existe, le chemin de la spec du niveau. Il lit lui-même le canon du projet et toutes les images, et rend un rapport complet, classé par gravité. Ne modifie aucun fichier.
 tools: Read, Glob, Grep
 model: opus
+# Mascotte du bandeau session-recap (ignorée par Claude Code et sans le mod).
+mascot: artiste
 skills:
   - level-design-taste
 ---

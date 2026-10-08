@@ -35,8 +35,15 @@ import {
   workflowStages,
   stateHex,
   cardWidth,
+  CARD_GAP,
   tierOf,
-  TIER_EMOJI,
+  mascotOf,
+  MASCOT_EMOJI,
+  agentDirs,
+  agentFront,
+  configDirOf,
+  installPathsOf,
+  onMascot,
   readOptions,
   shimmerBar,
   shortModel,
@@ -46,7 +53,7 @@ import {
   totals,
   weight,
 } from './recap'
-import type { AgentRun, Options } from './recap'
+import type { AgentRun, Mascot, Options } from './recap'
 
 const PANE = 'session-recap'
 type Dollar = Parameters<Hook<'session.measure'>>[0]
@@ -56,6 +63,38 @@ const recap = atom({ plugin: 'session-recap', key: 'recap' } as const, emptyReca
 const hidden = atom({ plugin: 'session-recap', key: 'hidden' } as const, false)
 const tick = atom({ plugin: 'session-recap', key: 'tick' } as const, 0)
 const view = atom({ plugin: 'session-recap', key: 'view' } as const, 'compact' as 'compact' | 'detail')
+
+// Mascotte déclarée par chaque type d'agent (`mascot:` de son frontmatter), lue une fois par session.
+const mascots = new Map<string, Mascot | undefined>()
+async function mascotFor($: Dollar, type: string): Promise<Mascot | undefined> {
+  if (mascots.has(type)) return mascots.get(type)
+  let found: Mascot | undefined
+  try {
+    const configDir = configDirOf($.plugin.root)
+    const installed = configDir === undefined ? '' : await $.fs.read(`${configDir}/plugins/installed_plugins.json`).catch(() => '')
+    const sessionRoot = await $.session.root().catch(() => undefined)
+    const dirs = agentDirs(type, { pluginRoot: $.plugin.root, configDir, sessionRoot, installPaths: installPathsOf(installed) })
+    let matched = false
+    search: for (const { dir, name } of dirs) {
+      const files = await $.fs.list(dir).catch(() => [])
+      for (const f of files) {
+        if (!f.name.endsWith('.md')) continue
+        const front = agentFront(await $.fs.read(`${dir}/${f.name}`).catch(() => ''))
+        if ((front.name ?? f.name.slice(0, -3)) === name) {
+          found = front.mascot
+          matched = true
+          break search
+        }
+      }
+    }
+    // un agent de plugin sans définition trouvée : le dire au journal de débogage plutôt que se replier en silence
+    if (!matched && type.includes(':')) $.ui.log(`récap : définition de ${type} introuvable, mascotte du modèle`, { to: 'debug' })
+  } catch {
+    // définition introuvable ou illisible : le métier du modèle
+  }
+  mascots.set(type, found)
+  return found
+}
 
 /** Lève en toast les alertes nouvelles et les marque. */
 async function raise($: Dollar, o: Options) {
@@ -215,6 +254,8 @@ export const register: Register = (on, options) => {
       await update($, recap, s =>
         onSpawn(s, { agentId, parentId: e.parentAgentId, agent, model: r.model, fork: e.fork, at, task: e.description }),
       )
+      const mascot = await mascotFor($, agent)
+      if (mascot !== undefined) await update($, recap, s => onMascot(s, { agentId, mascot }))
     }
     return r
   })
@@ -472,15 +513,15 @@ export const register: Register = (on, options) => {
       const crabBody = r.status === 'failed' ? '#ef4444' : r.status === 'done' ? '#8a7f7a' : '#d97757'
       const tint = r.status === 'failed' ? 'red' : undefined
       return (
-        <Box key={`strip-${r.id}`} width={cardWidth(e.props.bodyColumns)} borderStyle="round" paddingX={1}>
-          <Box key={`strip-body-${r.id}`}>
+        <Box key={`strip-${r.id}`} width={cardWidth(e.props.bodyColumns)} paddingRight={CARD_GAP}>
+          <Box key={`strip-body-${r.id}`} borderStyle="round" paddingX={1} flexGrow={1}>
             {isTerminal ? (
-              <Text color={tint} dimColor={r.status === 'done'}>{TIER_EMOJI[tierOf(r.model)]} </Text>
+              <Text color={tint} dimColor={r.status === 'done'}>{MASCOT_EMOJI[mascotOf(r)]} </Text>
             ) : (
               <els.Svg
                 key={`crab-${r.id}`}
-                source={crabSvg({ body: crabBody, animated: r.status === 'running', tier: tierOf(r.model), mono: r.status === 'done' })}
-                alt={`agent ${tierOf(r.model)}`}
+                source={crabSvg({ body: crabBody, animated: r.status === 'running', mascot: mascotOf(r), mono: r.status === 'done' })}
+                alt={`agent ${mascotOf(r)}`}
                 width={crabWidth()}
                 height={CRAB_HEIGHT}
               />
@@ -498,15 +539,17 @@ export const register: Register = (on, options) => {
     }
     // emplacement d'un agent prévu par le workflow et pas encore lancé
     const placeholder = (key: string, n: number) => (
-      <Box key={key} width={cardWidth(e.props.bodyColumns)} borderStyle="round" paddingX={1}>
-        {isTerminal ? (
-          <Text dimColor>◌ </Text>
-        ) : (
-          <els.Svg key={`${key}-crab`} source={crabSvg({ mono: true })} alt="agent à venir" width={crabWidth()} height={CRAB_HEIGHT} />
-        )}
-        <Box flexDirection="column" paddingLeft={1}>
-          <Text dimColor wrap="truncate-end">agent {n} — à venir</Text>
-          <Text dimColor wrap="truncate-end">en attente</Text>
+      <Box key={key} width={cardWidth(e.props.bodyColumns)} paddingRight={CARD_GAP}>
+        <Box key={`${key}-body`} borderStyle="round" paddingX={1} flexGrow={1}>
+          {isTerminal ? (
+            <Text dimColor>◌ </Text>
+          ) : (
+            <els.Svg key={`${key}-crab`} source={crabSvg({ mono: true })} alt="agent à venir" width={crabWidth()} height={CRAB_HEIGHT} />
+          )}
+          <Box flexDirection="column" paddingLeft={1}>
+            <Text dimColor wrap="truncate-end">agent {n} — à venir</Text>
+            <Text dimColor wrap="truncate-end">en attente</Text>
+          </Box>
         </Box>
       </Box>
     )
@@ -531,7 +574,7 @@ export const register: Register = (on, options) => {
                 ) : (
                   <Text color={sc} dimColor={st.status === 'todo'} wrap="truncate-end">{head}:</Text>
                 )}
-                <Box key={`grid-${i}`} flexDirection="row" flexWrap="wrap" width="100%">
+                <Box key={`grid-${i}`} flexDirection="row" flexWrap="wrap" rowGap={CARD_GAP} width="100%">
                   {st.runs.map(card)}
                   {Array.from({ length: st.placeholders }, (_, k) => placeholder(`ph-${i}-${k}`, st.runs.length + k + 1))}
                 </Box>
@@ -539,7 +582,7 @@ export const register: Register = (on, options) => {
             )
           })}
         {!showWorkflow && strips.length > 0 && (
-          <Box key="agent-grid" flexDirection="row" flexWrap="wrap" width="100%">
+          <Box key="agent-grid" flexDirection="row" flexWrap="wrap" rowGap={CARD_GAP} width="100%">
             {strips.map(card)}
           </Box>
         )}

@@ -296,6 +296,12 @@ class TestFrontmatter(Base):
         self.fx.replace(self.AGENT_PATH, "effort: high", "effort: extreme")
         self.assertError("frontmatter.effort")
 
+    def test_mascot_known_ok_unknown_warns(self):
+        self.fx.replace(self.AGENT_PATH, "effort: high", "effort: high\nmascot: chef")
+        self.assertEqual(self.run_validate().findings, [])
+        self.fx.replace(self.AGENT_PATH, "mascot: chef", "mascot: licorne")
+        self.assertWarning("frontmatter.mascot")
+
     def test_plugin_agent_ignored_fields_warn(self):
         for key in ("hooks", "mcpServers", "permissionMode"):
             with self.subTest(key=key):
