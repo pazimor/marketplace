@@ -1,91 +1,86 @@
-# Gabarit de spec d'un niveau
+# Level spec template
 
-Ordre tiré de la dernière spec d'arène validée sur un projet réel. Chaque section a une
-raison d'être ; ne pas en sauter une sans le dire. Les chiffres d'une spec sont des valeurs
-de **première création**, réglables ensuite par l'humain.
+Order taken from the last validated arena spec on a real project. Each section has a reason to exist; do not skip one without saying so. The figures in a spec are **first-creation** values, adjustable afterwards by the human.
 
 ```markdown
-# <Type> <Nom> — spec vN
+# <Type> <Name> — spec vN
 
-Tâche : <ID roadmap> · Procédure : level-design-build · Modèle : <spec validée la plus proche>
-Recettes : <fichier de recettes> · Contrôle : <checklist du projet> · Repère : <axes, origine>
+Task: <roadmap ID> · Procedure: level-design-build · Based on: <closest validated spec>
+Recipes: <recipes file> · Quality control: <project checklist> · Frame: <axes, origin>
 
-## 0. Décisions du commanditaire
-<vide à l'écriture ; rempli verbatim après les questions. Rien ne se construit avant.>
+## 0. Decisions from the sponsor
+<empty when written; filled in verbatim after the questions. Nothing is built before then.>
 
-## 1. Exigences
-1. <exigence, avec sa source : citation de l'humain ou ID canon>
+## 1. Requirements
+1. <requirement, with its source: a quote from the human or a canon ID>
 2. …
-<chacune recevra un verdict atteint / partiel / raté à la livraison>
+<each will receive a verdict of achieved / partial / missed at delivery>
 
-## 2. Défauts à ne pas reproduire
-- <leçon des niveaux précédents, avec ID canon>
-- <piège propre à la référence>
-- <erreur d'une analyse antérieure corrigée>
+## 2. Defects not to reproduce
+- <lesson from previous levels, with canon ID>
+- <pitfall specific to the reference>
+- <error from an earlier analysis, corrected>
 
-## 3. Déjà vérifié automatiquement
-| Asset candidat | Dimensions mesurées | Objets / colliders | Rôle proposé |
-Ce qui MANQUE (mesuré) : …
-Contraintes techniques constatées : …
+## 3. Already verified automatically
+| Candidate asset | Measured dimensions | Objects / colliders | Proposed role |
+What is MISSING (measured): …
+Technical constraints observed: …
 
-## 4. Intention
-<un paragraphe : l'histoire du lieu.>
-Ce qu'on garde de la référence : … · Ce qu'on refait à l'échelle du jeu : …
+## 4. Intent
+<one paragraph: the story of the place.>
+What we keep from the reference: … · What we rebuild at game scale: …
 
-## 5. Trois concepts de plan masse
-### Concept A — <nom>
-<croquis ASCII, légende commune aux trois>
-| Aire | Boîte | Plus long bord droit | Entrée → objectif (s de course) |
-| Zone | Emprise | Contenu | Relief |
-Circulation · lignes de vue · dangers · force · faiblesse
+## 5. Three master-plan concepts
+### Concept A — <name>
+<ASCII sketch, legend shared by all three>
+| Area | Box | Longest straight edge | Entry → objective (run time, s) |
+| Zone | Footprint | Content | Relief |
+Circulation · sightlines · hazards · strength · weakness
 ### Concept B — …
 ### Concept C — …
-Recommandation : <lequel, pourquoi>
+Recommendation: <which one, and why>
 
-## 5bis. Plan détaillé du concept recommandé
-- Relief : fonction, amplitudes, plateaux, cibles de pente
-- Danger principal et sa lisibilité
-- Cœur du niveau et objectif
-- Hors-carte : bandes de densité
-- Arrivées ennemies, points de repli, plancher de sécurité
-- **S'orienter à la voix** : un nom court et un repère visible par zone
+## 5bis. Detailed plan of the recommended concept
+- Relief: function, amplitudes, plateaus, slope targets
+- Main hazard and its readability
+- Core of the level and objective
+- Off-map: density bands
+- Enemy arrivals, fallback points, safety floor
+- **Orienting by voice**: a short name and a visible landmark per zone
 
-## 6. Variantes et modularité
-Groupes de layouts (modes) · slots et modules par zone · exclusions · nombre de slots
-dérivé de l'aire.
+## 6. Variants and modularity
+Layout groups (modes) · slots and modules per zone · exclusions · number of slots derived from the area.
 
-## 7. Environnement vivant
-| Option | Principe | Où | Coût | Gameplay | Risque |
-Recommandation · liste des éléments vivants avec leur cadence
+## 7. Living environment
+| Option | Principle | Where | Cost | Gameplay | Risk |
+Recommendation · list of living elements with their cadence
 
-## 8. Objectif, lumière, performance
-Candidats d'objet central (assemblage, taille cible, lecture) · rendu / ciel / fog / budget
-couleur · **caméras de capture nommées** (position, direction, FOV) ·
-| Poste | Renderers estimés | Plafond |
+## 8. Objective, light, performance
+Central object candidates (assembly, target size, readability) · rendering / sky / fog / color budget · **named capture cameras** (position, direction, FOV) ·
+| Item | Estimated renderers | Ceiling |
 
-## 9. Passe de construction
-Fichiers, commandes, racines · briques réutilisées · briques à mutualiser · audits intégrés
-· plan chiffré réalisé et écarts assumés · passes correctives versionnées.
+## 9. Build pass
+Files, commands, roots · reused building blocks · blocks to consolidate · integrated audits · quantified plan achieved and deviations accepted · versioned corrective passes.
 
-## 10. Questions au commanditaire
-1. <question structurante> — (a) … (b) … (c) … — **Reco : (x)**, parce que …
+## 10. Questions for the sponsor
+1. <structuring question> — (a) … (b) … (c) … — **Rec: (x)**, because …
 2. …
 
 ## 11. Definition of Done
-- [ ] Spec validée (§0 rempli)
-- [ ] Construction idempotente : 2ᵉ passage « rien à faire »
-- [ ] Audit vert, chiffré
-- [ ] Captures fixes : luminance, écrêtage, lisibilité par vue
-- [ ] Jeu scénarisé : surfaces, chutes, modes
-- [ ] Revue `level-design-reviewer` sans bloquant
-- [ ] Livraison honnête : mesuré / restant / non vérifié
+- [ ] Spec validated (§0 filled)
+- [ ] Idempotent build: 2nd run "nothing to do"
+- [ ] Audit green, quantified
+- [ ] Fixed-camera captures: luminance, clipping, readability per view
+- [ ] Gameplay scripted: surfaces, falls, modes
+- [ ] `level-design-reviewer` review with no blockers
+- [ ] Honest delivery: measured / remaining / unverified
 ```
 
-## Pourquoi cet ordre
+## Why this order
 
-- **§0 vide au départ** : on ne construit pas sur une décision imaginée.
-- **§1 numéroté** : la livraison devient auditable exigence par exigence.
-- **§2** est la mémoire anti-régression ; **§3** sépare le mesuré du supposé.
-- **§5 trois concepts** : force un vrai choix plutôt que la première idée.
-- **§5bis « à la voix »** : en coop, un niveau se joue en se parlant.
-- **§10 en dernier** mais relayé en premier : les questions découlent de tout ce qui précède.
+- **§0 empty at the start**: you do not build on an imagined decision.
+- **§1 numbered**: delivery becomes auditable requirement by requirement.
+- **§2** is the anti-regression memory; **§3** separates what is measured from what is assumed.
+- **§5 three concepts**: forces a real choice rather than the first idea.
+- **§5bis "by voice"**: in co-op, a level is played by talking to each other.
+- **§10 last**, but passed on first: the questions follow from everything above them.

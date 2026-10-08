@@ -1,124 +1,59 @@
 ---
 name: level-design-build
-description: Procédure pour construire ou faire évoluer un niveau 3D — nouvelle arène, nouvelle map, nouveau biome, nouvelle salle, ou nouvelle version d'une scène après les retours de l'humain (« fais une nouvelle map », « v3 de la gorge », « refais cette salle »). Enchaîne cadrage, recettes mesurées de la référence, spec avec questions, passe de construction scriptée et idempotente, audit, captures, revue et livraison honnête. Utiliser avant d'écrire la moindre spec ou le moindre script de construction de scène.
+description: Procedure for building or evolving a 3D level — new arena, new map, new biome, new room, or a new version of a scene after feedback from the human ("make a new map", "v3 of the gorge", "redo this room"). Runs through framing, measured recipes from the reference, a spec with questions, a scripted and idempotent build pass, audit, screenshots, review and honest delivery. Use before writing any spec or scene build script, however small.
 ---
 
-# Construire un niveau — la procédure
+# Building a level — the procedure
 
-Ce skill dit **quand** et **dans quel ordre**. Le skill `level-design-taste` dit **ce qui est
-bon** ; l'agent `level-design-reviewer` **juge**. Les règles propres au projet (moteur,
-outils, pièges, chartes) vivent dans son canon (`.claude/canon/`) et dans ses **extensions**
-(`.claude/level-design/index.md`) : quand ce skill et l'index divergent, l'index gagne ;
-quand l'index et une entrée `[USER]` divergent, le canon gagne.
+This skill says **when** and **in what order**. The `level-design-taste` skill says **what is good**; the `level-design-reviewer` agent **judges**. The project's own rules (engine, tools, pitfalls, style guides) live in its canon (`.claude/canon/`) and in its **extensions** (`.claude/level-design/index.md`): when this skill and the index diverge, the index wins; when the index and a `[USER]` entry diverge, the canon wins.
 
-## Extensions du projet — à lire en premier
+## Project extensions — read first
 
-Si `.claude/level-design/index.md` existe, lis-le **avant l'étape 1**. Il déclare le
-contexte du jeu, les attentes de l'humain, les références par type de scène, les specs et
-recettes déjà écrites, la checklist du projet, les précisions de chaque étape (outils,
-commandes, agents) et le fichier de pièges. À chaque étape ci-dessous, applique aussi la
-ligne `Étape n` de l'index. Grammaire, ordre de priorité et reprise de l'existant :
-[references/extensions.md](references/extensions.md). Index absent : chercher les specs et
-proposer de le créer.
+If `.claude/level-design/index.md` exists, read it **before step 1**. It declares the game's context, the human's expectations, the references per scene type, the specs and recipes already written, the project checklist, the details of each step (tools, commands, agents) and the pitfalls file. At each step below, also apply the `Step n` line of the index. Grammar, order of precedence and resuming existing work: [references/extensions.md](references/extensions.md). No index: look for the specs and offer to create one.
 
-## Ce que l'humain attend, toujours
+## What the human always expects
 
-- **L'humain décide du design.** Les questions se posent **avant** de construire, chacune
-  avec options (a)/(b)/(c) et une recommandation argumentée en premier. Sa réponse est
-  gravée telle quelle dans le canon (`[USER]`), puis on construit sans redemander.
-- **On construit, l'humain se promène.** Il dit ce qui le dérange ; il ne place pas les
-  choses à notre place. **Ses retouches à la main sont sacrées** : la passe les préserve.
-- **Une passe de construction scriptée et idempotente par scène.** Rejouée N fois : même
-  résultat, zéro doublon, le 2ᵉ passage annonce « rien à faire ». L'écrasement vit dans une
-  commande séparée, marquée dangereuse, que seul l'humain déclenche.
-- **Qualité avant vitesse.** On juge soi-même les captures et on refait plutôt que de montrer
-  un rendu faible.
-- Rien n'est commité ni poussé : le working tree revient à l'humain.
+- **The human decides the design.** Questions are asked **before** building, each with options (a)/(b)/(c) and a reasoned recommendation first. The answer is recorded as given in the canon (`[USER]`), then we build without asking again.
+- **We build, the human walks through it.** They say what bothers them; they do not place things on our behalf. **Their manual tweaks are sacred**: the pass preserves them.
+- **One scripted, idempotent build pass per scene.** Replayed N times: same result, zero duplicates, and the 2nd run reports "nothing to do". Overwriting lives in a separate command, marked dangerous, that only the human triggers.
+- **Quality over speed.** We judge the screenshots ourselves and redo the work rather than show a weak render.
+- Nothing is committed or pushed: the working tree goes back to the human.
 
-## Les étapes
+## The steps
 
-Les ⏸ sont des arrêts : on attend l'humain. « Agent capable » = le modèle le plus fort
-disponible ; si un orchestrateur délègue, il choisit selon la mention entre
-parenthèses de chaque étape.
+Steps marked ⏸ are stops: we wait for the human. "Capable agent" means the most capable model available; if an orchestrator delegates, it picks according to the note in parentheses on each step.
 
-1. **Cadrage** (orchestration) — relire ce skill, l'index des extensions, `level-design-taste`,
-   les entrées du canon du domaine depuis la dernière scène livrée, la ligne de roadmap.
-   **Lister les specs et recettes existantes** (section `Specs` de l'index) : une nouvelle
-   version reprend sa spec, un niveau neuf prend la dernière spec validée du même type. Graver l'intention de
-   l'humain en `[USER]`, telle qu'il la donne. Écrire la **Lecture du niveau**
-   (`level-design-taste` §0.B).
+1. **Framing** (orchestration) — re-read this skill, the extensions index, `level-design-taste`, the canon entries of the domain since the last delivered scene, and the roadmap line. **List the existing specs and recipes** (the `Specs` section of the index): a new version reuses its spec; a new level takes the last validated spec of the same type. Record the human's intent as a `[USER]` entry, as they state it. Write the **Level reading** (`level-design-taste` §0.B).
 
-2. **Recettes de la référence** (agent capable, lecture seule) — mesurer la scène de
-   référence la plus proche (démo du pack d'assets, niveau déjà validé) **à la source** :
-   chiffres, pas impressions. Méthode : [references/recettes.md](references/recettes.md).
-   Livrable : un fichier de recettes à côté des specs du projet. Une recette déjà mesurée
-   pour la même référence se complète, elle ne se refait pas.
+2. **Recipes from the reference** (capable agent, read-only) — measure the closest reference scene (asset pack demo, already validated level) **at the source**: numbers, not impressions. Method: [references/recipes.md](references/recipes.md). Deliverable: a recipes file next to the project's specs. A recipe already measured for the same reference is completed, not redone.
 
-3. **Spec** (même agent) — gabarit : [references/spec.md](references/spec.md). Exigences
-   numérotées, défauts à ne pas reproduire, déjà mesuré, intention, **trois concepts de plan
-   masse cotés**, modularité, vivant, objectif/lumière/budget, passe, **questions**, DoD.
-   Modèle : la dernière spec validée du même type dans le projet. **Nouvelle version** : on
-   met à jour la spec existante (décisions acquises en §0, défauts constatés en §2) au lieu
-   d'en écrire une neuve.
+3. **Spec** (same agent) — template: [references/spec.md](references/spec.md). Numbered requirements, defaults not to reproduce, what is already measured, intent, **three dimensioned layout concepts**, modularity, living environment, objective/lighting/budget, pass, **questions**, DoD. Model: the last validated spec of the same type in the project. **New version**: update the existing spec (decisions already made in §0, defects found in §2) instead of writing a new one.
 
-4. ⏸ **Questions à l'humain** — relayées en clair, courtes, recommandation en premier. Les
-   plus structurantes d'abord ; ≈ 10 à 18 pour un niveau neuf. Il valide en bloc ou répond
-   point par point. Réponses gravées en `[USER]` (noter « interp. » ce qui est interprété)
-   et recopiées en tête de spec (§ Décisions). Un point non tranché reste listé en attente :
-   on ne décide pas à sa place.
+4. ⏸ **Questions for the human** — relayed plainly, short, recommendation first. The most structuring ones first; ≈ 10 to 18 for a new level. The human approves in bulk or answers point by point. Answers are recorded as `[USER]` entries (mark "interp." whatever is interpreted) and copied at the top of the spec (§ Decisions). An undecided point stays listed as pending: we do not decide on the human's behalf.
 
-5. **Prérequis de code** (agent capable) — ce que la scène exige et que le runtime n'a pas
-   (nouveaux types d'objets, réplication, points sûrs…). Contrats sérialisés en ajout
-   seulement (jamais réordonner une liste qui entre dans un tirage à graine). Compilation
-   verte avant de continuer.
+5. **Code prerequisites** (capable agent) — what the scene requires and the runtime does not provide (new object types, replication, safe points…). Serialized contracts are additive only (never reorder a list that feeds a seeded draw). Green compilation before continuing.
 
-6. **Passe de construction** (agent capable) — un script par scène, commandes numérotées
-   (`1 — Construire`, `2 — Auditer`…), sans dialogue bloquant, idempotente, avec :
-   - **empreinte** des objets créés : un objet dont la pose a changé depuis la création est
-     une retouche humaine → préservé, nommé au journal, jamais écrasé ; le décor neuf va
-     dans un groupe neuf ;
-   - **réglages exposés** comme repères visibles et déplaçables (ancres, pivots, planchers),
-     jamais en dur ;
-   - **audits intégrés** en lecture seule ([level-design-taste/references/audits.md](../level-design-taste/references/audits.md)) ;
-   - **caméras de capture nommées** et persistantes, réglées comme la caméra joueur.
-   Pour un kit modulaire : une description déclarative (layout) + un constructeur
-   déterministe qui **refuse en bloc** un layout invalide avec un message nommé.
+6. **Build pass** (capable agent) — one script per scene, numbered commands (`1 — Build`, `2 — Audit`…), with no blocking dialog, idempotent, with:
+   - **fingerprint** of created objects: an object whose placement has changed since creation is a human adjustment → preserved, named in the log, never overwritten; new scenery goes into a new group;
+   - **exposed settings** as visible, movable markers (anchors, pivots, floors), never hard-coded;
+   - **built-in audits**, read-only ([level-design-taste/references/audits.md](../level-design-taste/references/audits.md));
+   - **named capture cameras** that persist, set up like the player camera.
+   For a modular kit: a declarative description (layout) + a deterministic builder that **rejects an invalid layout as a whole** with a named message.
 
-7. **Jeu** (agent opérateur du moteur) — chaque commande jouée **deux fois** (la 2ᵉ = « rien
-   à faire »), audit, captures, puis le niveau **joué** : tenir debout sur chaque surface,
-   tester chaque chute, chaque mode. Sessions de jeu courtes. Un objet qui n'existe qu'à
-   l'exécution est absent des captures hors jeu.
+7. **Play** (engine operator agent) — each command run **twice** (the 2nd run = "nothing to do"), audit, screenshots, then the level **played**: make sure you can stand on every surface, test every fall, every mode. Short play sessions. An object that only exists at runtime is absent from screenshots taken outside play.
 
-8. **Jugement** — l'orchestration regarde **elle-même** les captures en pleine résolution,
-   puis l'agent `level-design-reviewer` avec la spec. Dérouler le pre-flight de
-   `level-design-taste` §8 en entier, puis la checklist du projet citée par l'index. Barème : bloquant > majeur > mineur ; on ne traite une
-   gravité que lorsque la précédente est vide. Faible → retour à l'étape 6 **avant** de
-   montrer.
+8. **Judgment** — the orchestration itself reviews the screenshots at full resolution, then the `level-design-reviewer` agent with the spec. Run through the entire pre-flight of `level-design-taste` §8, then the project checklist cited by the index. Severity scale: blocking > major > minor; a severity is only addressed once the previous one is empty. If the result is weak, return to step 6 **before** showing it.
 
-9. ⏸ **Livraison** — résultat honnête : ce qui marche (mesuré), ce qui reste (mesuré), ce
-   qui n'a **pas** pu être vérifié et pourquoi. L'humain se promène ; ses
-   retours → canon `[USER]` → nouvelle version par l'étape 6 (mode : `level-design-taste`
-   §6).
+9. ⏸ **Delivery** — an honest result: what works (measured), what remains (measured), what could **not** be verified and why. The human walks through it; their feedback → canon `[USER]` → new version via step 6 (mode: `level-design-taste` §6).
 
-## Tenir la procédure à jour
+## Keeping the procedure up to date
 
-Chaque leçon nouvelle → une entrée datée dans le canon du projet **et**, si c'est un piège
-réutilisable, une ligne dans le fichier de pièges cité par l'index. Une règle propre au
-projet qui revient à chaque niveau va dans l'index ou le fichier de type de scène qu'il cite,
-jamais dans ce plugin. Les pièges génériques déjà
-payés sont dans [references/pieges.md](references/pieges.md) : les lire avant d'écrire la
-passe.
+Every new lesson → a dated entry in the project canon **and**, if it is a reusable pitfall, a line in the pitfalls file cited by the index. A project-specific rule that comes back on every level goes into the index or the scene-type file it cites, never into this plugin. The generic pitfalls already learned the hard way are in [references/pitfalls.md](references/pitfalls.md): read them before writing the pass.
 
-## Garde-fous
+## Guardrails
 
-- Pas de pose à la main par l'agent dans la scène de l'humain : tout passe par la passe.
-  Quand l'humain retouche, la retouche est reportée dans le script ou préservée par
-  l'empreinte.
-- Une passe qui ne converge pas (deux critères qui font osciller un objet) est un bug, pas
-  un réglage.
-- Ne jamais valider sur les seuls tests hors moteur : le contrôle dans le moteur trouve ce
-  que le prototype ne voit pas.
-- Valider **une** famille, **un** coin et **une** jonction à l'écran avant de généraliser.
-  Trop de génération et pas assez de regard est l'échec type.
-- Ne jamais relancer à l'aveugle une commande d'historique d'un outil de pilotage du
-  moteur : son contexte a changé.
+- No hand placement by the agent in the human's scene: everything goes through the pass. When the human adjusts something, the adjustment is carried into the script or preserved by the fingerprint.
+- A pass that does not converge (two criteria making an object oscillate) is a bug, not a setting.
+- Never validate on out-of-engine tests alone: the check inside the engine finds what the prototype does not see.
+- Validate **one** family, **one** corner and **one** junction on screen before generalizing. Generating too much and looking too little is the typical failure.
+- Never blindly re-run a history command from an engine-driving tool: its context has changed.

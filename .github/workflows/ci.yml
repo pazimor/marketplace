@@ -1,4 +1,4 @@
-# Outillage du repo uniquement (CANON:5) : le validateur tourne aussi en local, sans GitHub —
+# Repo tooling only: the validator also runs locally, without GitHub —
 #   python3 scripts/validate.py . && python3 -m unittest discover -s scripts/tests -v
 name: CI
 
@@ -24,8 +24,8 @@ jobs:
   smoke-install:
     runs-on: ubuntu-latest
     env:
-      # Aucune authentification nécessaire : validate / marketplace add / install / list
-      # sont des commandes locales. HOME isolé pour partir d'une config Claude Code vierge.
+      # No authentication needed: validate / marketplace add / install / list
+      # are local commands. HOME is isolated to start from a blank Claude Code config.
       HOME: ${{ github.workspace }}/../claude-home
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
               claude plugin validate "$dir"
             done
           else
-            echo "::warning::'claude plugin validate' indisponible dans cette version du CLI, étape sautée"
+            echo "::warning::'claude plugin validate' unavailable in this version of the CLI, step skipped"
           fi
 
       - name: Add marketplace and install the plugin
@@ -63,7 +63,7 @@ jobs:
           import json, sys
           plugins = {p["id"]: p for p in json.load(sys.stdin)}
           p = plugins.get("orchestration@marketplace")
-          assert p is not None, f"orchestration@marketplace absent : {sorted(plugins)}"
-          assert p.get("enabled"), f"orchestration@marketplace installé mais désactivé : {p}"
-          print("orchestration@marketplace", p.get("version"), "installé et activé")
+          assert p is not None, f"orchestration@marketplace missing: {sorted(plugins)}"
+          assert p.get("enabled"), f"orchestration@marketplace installed but disabled: {p}"
+          print("orchestration@marketplace", p.get("version"), "installed and enabled")
           '

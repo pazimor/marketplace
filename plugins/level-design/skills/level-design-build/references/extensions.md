@@ -1,78 +1,63 @@
-# Extensions du projet : `.claude/level-design/`
+# Project extensions: `.claude/level-design/`
 
-Le plugin est générique. Un projet l'**étend sans le modifier** : ses règles propres, ses
-références par type de scène, ses specs, son outillage et ses pièges sont déclarés dans un
-index lu par les deux skills et par l'agent `level-design-reviewer`.
+The plugin is generic. A project **extends it without modifying it**: its own rules, its references per scene type, its specs, its tooling and its pitfalls are declared in an index that both skills and the `level-design-reviewer` agent read.
 
-## Où
+## Where
 
-- `.claude/level-design/index.md` à la racine du projet — **le seul point d'entrée**.
-- Les fichiers propres au projet vivent à côté (`.claude/level-design/arene.md`,
-  `pieges.md`…) ou ailleurs dans le repo : l'index les cite par chemin relatif à la racine.
+- `.claude/level-design/index.md` at the project root — **the only entry point**.
+- The project's own files live alongside it (`.claude/level-design/arena.md`, `pitfalls.md`…) or elsewhere in the repo: the index cites them by path relative to the root.
 
-## Grammaire de l'index
+## Index grammar
 
-Sections dans cet ordre ; une section vide s'omet. Chaque chemin est suivi de son rôle.
+Sections in this order; an empty section is omitted. Each path is followed by its role.
 
 ```markdown
-# Level design — extensions du projet
+# Level design — project extensions
 
-## Contexte
-<un paragraphe : genre, nombre de joueurs, déplacement, gabarit joueur mesuré, moteur,
-pack d'assets, style de rendu.>
+## Context
+<one paragraph: genre, number of players, movement, measured player gauge, engine, asset pack, rendering style.>
 
-## Attentes de l'humain
-- <attente qui vaut pour tout niveau, avec son ID canon>
+## Human expectations
+- <expectation that applies to every level, with its canon ID>
 
-## Toujours lire
-- `<chemin>` — <rôle>
+## Always read
+- `<path>` — <role>
 
-## <Type de scène>            (ex. « Arène extérieure », « Salle intérieure »)
-- `<chemin>` — <rôle : règles, recettes, référence mesurée>
-- <règle propre au projet pour ce type, avec son ID canon>
+## <Scene type>            (e.g. "Exterior arena", "Interior room")
+- `<path>` — <role: rules, recipes, measured reference>
+- <project rule for this type, with its canon ID>
 
 ## Specs
-- Dossier : `<chemin>` · nommage : `<motif>`
-- Dernière spec validée par type : `<chemin>` (…)
-- Recettes déjà mesurées : `<chemin>` — <référence mesurée>
+- Folder: `<path>` · naming: `<pattern>`
+- Last validated spec per type: `<path>` (…)
+- Recipes already measured: `<path>` — <measured reference>
 
-## Contrôle qualité
-- `<chemin>` — <checklist du projet, prime sur le pre-flight générique pour ce qu'elle couvre>
+## Quality control
+- `<path>` — <project checklist, which takes precedence over the generic pre-flight for what it covers>
 
-## Étapes
-- Étape <n> (<nom>) — <précision du projet : commande, outil, agent, discipline>
+## Steps
+- Step <n> (<name>) — <project-specific detail: command, tool, agent, discipline>
 
-## Pièges
-- `<chemin>` — pièges propres au moteur et aux assets du projet
+## Pitfalls
+- `<path>` — pitfalls specific to the project's engine and assets
 ```
 
-## Ordre de priorité
+## Priority order
 
-canon du projet `[USER]` > index et fichiers qu'il cite > skills du plugin > références
-mesurées (démos du pack) > intuition. Quand l'index et le plugin divergent, l'index gagne ;
-quand l'index et une entrée `[USER]` divergent, le canon gagne et on signale l'écart.
+Project canon `[USER]` > index and the files it cites > the plugin's skills > measured references (pack demos) > intuition. When the index and the plugin diverge, the index wins; when the index and a `[USER]` entry diverge, the canon wins and the gap is reported.
 
-## Quand le lire
+## When to read it
 
-- **Toujours en premier** : au cadrage (`level-design-build` étape 1), avant d'appliquer
-  `level-design-taste`, et au début de chaque review.
-- Lire `Contexte`, `Attentes`, `Toujours lire`, la section du type de scène jugé ou
-  construit, puis `Specs`. `Contrôle qualité`, `Étapes` et `Pièges` à l'étape concernée.
+- **Always first**: during framing (`level-design-build` step 1), before applying `level-design-taste`, and at the start of each review.
+- Read `Context`, `Human expectations`, `Always read`, the section for the scene type being judged or built, then `Specs`. Read `Quality control`, `Steps` and `Pitfalls` at the step concerned.
 
-## Reprendre le travail déjà fait
+## Resuming work already done
 
-- **Une nouvelle version d'un niveau reprend sa spec existante** : ses décisions (§0) restent
-  acquises, ses défauts constatés deviennent le §2, sa passe de construction se corrige au
-  lieu de repartir de zéro.
-- **Un niveau neuf prend pour modèle la dernière spec validée du même type** listée dans
-  l'index.
-- **Une recette déjà mesurée pour la même référence se réutilise** : on la complète, on ne la
-  remesure pas.
-- Les leçons d'une session vont dans le canon **et**, si c'est un piège réutilisable, dans le
-  fichier de pièges cité par l'index.
+- **A new version of a level picks up its existing spec**: its decisions (§0) remain settled, its observed defects become §2, and its build pass is corrected instead of starting over from scratch.
+- **A new level uses the last validated spec of the same type, listed in the index, as its template.**
+- **A recipe already measured for the same reference is reused**: it is extended, not re-measured.
+- Lessons from a session go into the canon **and**, if they are a reusable pitfall, into the pitfalls file cited by the index.
 
-## Index absent
+## Missing index
 
-Chercher un dossier de specs (`.claude/level-specs/`, `docs/**/level*`) et grep le canon sur
-« level design », « arène », « salle », « map ». Proposer à l'humain de créer l'index avec ce
-qui a été trouvé ; ne pas l'écrire sans son accord.
+Look for a specs folder (`.claude/level-specs/`, `docs/**/level*`) and grep the canon for "level design", "arena", "room", "map". Offer the human to create the index with what was found; do not write it without their agreement.

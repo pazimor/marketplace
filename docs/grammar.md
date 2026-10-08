@@ -1,45 +1,41 @@
-# Grammaire formelle — canon et roadmap
+# Formal grammar — canon and roadmap
 
-Ce document **décrit** la grammaire que définissent les deux skills du plugin `orchestration`.
-Il n'en invente aucune variante : les SKILL.md restent seuls propriétaires de la grammaire
-(`CANON:3`). En cas d'écart entre ce document et un SKILL.md, le SKILL.md fait foi et ce
-document est à corriger.
+This document **describes** the grammar defined by the two skills of the `orchestration` plugin.
+It invents no variant of its own: the SKILL.md files alone own the grammar (`CANON:2`). If this
+document and a SKILL.md differ, the SKILL.md prevails and this document must be corrected.
 
-- Canon : `plugins/orchestration/skills/canon-tracker/SKILL.md`, § « Où vit le canon »,
-  § « Grammaire d'une entrée », § « Provenance », § « Opérations courantes ».
-- Roadmap : `plugins/orchestration/skills/roadmap-tracker/SKILL.md`, § « Où vit la roadmap »,
-  § « Grammaire du fichier » (bloc « Structure du fichier » + « Conventions »),
-  § « Opérations courantes ».
+- Canon: `plugins/orchestration/skills/canon-tracker/SKILL.md`, § "Where the canon lives",
+  § "Entry grammar", § "Provenance", § "Common operations".
+- Roadmap: `plugins/orchestration/skills/roadmap-tracker/SKILL.md`, § "Where the roadmap lives",
+  § "File grammar" (block "File structure" + "Conventions"), § "Common operations".
 
-Le validateur exécutable est `scripts/validate.py` (python3 stdlib, aucune dépendance,
-aucun appel réseau) :
+The executable validator is `scripts/validate.py` (python3 stdlib, no dependency, no network call):
 
 ```sh
-python3 scripts/validate.py [RACINE] [--strict]     # RACINE par défaut : .
-python3 -m unittest discover -s scripts/tests -v    # tests du validateur
+python3 scripts/validate.py [ROOT] [--strict]     # ROOT by default: .
+python3 -m unittest discover -s scripts/tests -v    # validator tests
 ```
 
-Sortie : une ligne par constat, `ERROR|WARN <fichier>:<ligne>: [<code>] <message>`, puis un
-bilan. Code de sortie `0` sans erreur, `1` avec au moins une erreur (ou un avertissement sous
-`--strict`), `2` si la racine n'existe pas. Chaque partie absente (manifestes, canon,
-roadmap) est simplement ignorée, ce qui rend le script utilisable sur n'importe quel projet
-qui utilise le plugin.
+Output: one line per finding, `ERROR|WARN <file>:<line>: [<code>] <message>`, then a summary. Exit
+code `0` with no error, `1` with at least one error (or a warning under `--strict`), `2` if the root
+does not exist. Each missing part (manifests, canon, roadmap) is simply skipped, which makes the
+script usable on any project that uses the plugin.
 
-Les colonnes **Niveau** ci-dessous distinguent ce qui viole une règle écrite dans un SKILL.md
-(`ERROR`) de ce qui est seulement suspect ou relève d'une lecture non tranchée (`WARN`).
+The **Level** columns below distinguish what violates a rule written in a SKILL.md (`ERROR`) from
+what is only suspect or falls under an unsettled reading (`WARN`).
 
 ## Notation
 
-EBNF ISO simplifiée : `=` définit, `,` concatène, `|` alterne, `[ … ]` optionnel,
-`{ … }` zéro ou plus, `"…"` littéral, `? … ?` description informelle. `SP` est une espace,
-`NL` une fin de ligne, `INDENT` une ou plusieurs espaces/tabulations en début de ligne.
+Simplified ISO EBNF: `=` defines, `,` concatenates, `|` alternates, `[ … ]` optional, `{ … }` zero or
+more, `"…"` literal, `? … ?` informal description. `SP` is a space, `NL` a line break, `INDENT` one or
+more spaces or tabs at the start of a line.
 
 ```ebnf
 digit      = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 number     = digit , { digit } ;
 date       = digit , digit , digit , digit , "-" , digit , digit , "-" , digit , digit ;
-             (* AAAA-MM-JJ, et une date calendaire réelle *)
-text       = ? un ou plusieurs caractères, hors fin de ligne ? ;
+             (* YYYY-MM-DD, and a real calendar date *)
+text       = ? one or more characters, excluding end of line ? ;
 blank-line = { SP } , NL ;
 ```
 
@@ -47,31 +43,30 @@ blank-line = { SP } , NL ;
 
 ## 1. Canon — `.claude/canon/*.md`
 
-Source : canon-tracker, § « Où vit le canon » et § « Grammaire d'une entrée ».
+Source: canon-tracker, § "Where the canon lives" and § "Entry grammar".
 
-### 1.1 Emplacement
+### 1.1 Location
 
-- Un dossier `.claude/canon/` à la racine du repo, un **thème par fichier** `*.md`
-  (`attentes.md`, `conventions.md`, `tests.md`, `invariants.md`, plus tout thème
-  clairement distinct).
-- **Jamais de `divers.md`** (§ « Où vit le canon »).
+- A `.claude/canon/` folder at the root of the repo, one **theme per file** `*.md` (`expectations.md`,
+  `conventions.md`, `tests.md`, `invariants.md`, plus any clearly distinct theme).
+- **Never a `misc.md`** (§ "Where the canon lives").
 
-### 1.2 Fichier
+### 1.2 File
 
 ```ebnf
 canon-file   = { blank-line } , title-line , { blank-line | entry | heading-line } ;
-title-line   = "# " , text , NL ;                 (* « # Tests », « # Invariants »… *)
-heading-line = "#" , { "#" } , SP , text , NL ;   (* toléré, cf. point ambigu A3 *)
+title-line   = "# " , text , NL ;                 (* "# Tests", "# Invariants"… *)
+heading-line = "#" , { "#" } , SP , text , NL ;   (* tolerated, see ambiguous point A3 *)
 entry        = "- " , entry-body , NL , { continuation } ;
-continuation = INDENT , text , NL ;               (* ligne repliée, ou ligne « — obsolète » *)
+continuation = INDENT , text , NL ;               (* wrapped line, or "— obsolete" line *)
 ```
 
-Une entrée tient sur une ligne logique : la ligne `- …` et ses lignes de continuation
-indentées, jointes par une espace. Une ligne vide termine l'entrée. **Toute ligne non vide
-qui n'est ni un titre, ni une entrée, ni une continuation est de la prose flottante,
-interdite** (« Jamais de prose flottante, jamais de paragraphe hors entrée »).
+An entry fits on one logical line: the `- …` line and its indented continuation lines, joined by a
+space. A blank line ends the entry. **Any non-empty line that is neither a title, an entry, nor a
+continuation is floating prose, which is forbidden** ("Never floating prose, never a paragraph
+outside an entry").
 
-### 1.3 Entrée
+### 1.3 Entry
 
 ```ebnf
 entry-body   = live-entry | struck-entry | struck-point ;
@@ -80,55 +75,53 @@ live-entry   = head , SP , point ;
 head         = "`CANON:" , number , "`" , SP , provenance ;
 provenance   = "[USER:" , name , SP , date , "]"
              | "[MODEL" , SP , date , "]" ;
-name         = ? texte non vide sans « ] », sans espace en tête ni en fin ? ;
-point        = text , [ SP , "(promu de MODEL)" ] ;   (* promotion : USER uniquement *)
+name         = ? non-empty text without "]", with no leading or trailing space ? ;
+point        = text , [ SP , "(promoted from MODEL)" ] ;   (* promotion: USER only *)
 
-(* Dépréciation — deux lectures acceptées, cf. point ambigu A1 *)
-struck-entry = "~~" , live-entry , "~~" , obsolete-tail ;          (* forme de l'exemple *)
-struck-point = head , SP , "~~" , point , "~~" , obsolete-tail ;   (* « barrer le texte » *)
-obsolete-tail = SP , obsolete | NL , INDENT , obsolete ;             (* fin de ligne ou dessous *)
-obsolete     = "— obsolète" , SP , date , SP , ":" , SP , reason ;
-reason       = text ;   (* peut citer l'ID remplaçant, ex. « remplacé par `CANON:12` » *)
+(* Deprecation — two accepted readings, see ambiguous point A1 *)
+struck-entry = "~~" , live-entry , "~~" , obsolete-tail ;          (* form of the example *)
+struck-point = head , SP , "~~" , point , "~~" , obsolete-tail ;   (* "strike through the text" *)
+obsolete-tail = SP , obsolete | NL , INDENT , obsolete ;             (* end of line or below *)
+obsolete     = "— obsolete" , SP , date , [ SP ] , ":" , SP , reason ;   (* written without the space *)
+reason       = text ;   (* may cite the replacing ID, e.g. "replaced by `CANON:12`" *)
 ```
 
-Exemple réel accepté (`.claude/canon/invariants.md`) :
+Accepted example (long struck entry, `— obsolete` line below it):
 
 ```markdown
-- ~~`CANON:7` [USER:eddy 2026-09-24] Le plugin memory est retiré du repo immédiatement…~~
-  — obsolète 2026-09-24 : la décision explicite est venue, remplacé par `CANON:10`.
+- ~~`CANON:7` [MODEL 2026-07-02] The tests run via `make test`, from the repository root, once the fixtures are regenerated…~~
+  — obsolete 2026-08-14: `make test` was removed, replaced by `CANON:12`.
 ```
 
-### 1.4 Règles vérifiées
+### 1.4 Checked rules
 
-| Code | Niveau | Règle | Source (canon-tracker) |
+| Code | Level | Rule | Source (canon-tracker) |
 |---|---|---|---|
-| `canon.title` | ERROR | Le fichier commence par `# <Thème>` | § « Initialiser le canon » |
-| `canon.prose` | ERROR | Aucune ligne hors entrée | § « Grammaire d'une entrée » |
-| `canon.entry` | ERROR | Entrée conforme à `entry-body` (ID entre backticks, provenance `[USER:<nom> date]` ou `[MODEL date]`, point non vide) | § « Grammaire d'une entrée » |
-| `canon.date` | ERROR | Dates calendaires valides | § « Grammaire d'une entrée » |
-| `canon.duplicate-id` | ERROR | `CANON:n` unique **sur tout le dossier**, entrées barrées comprises (jamais réutilisé) | § « Grammaire d'une entrée » |
-| `canon.strike` | ERROR | `~~` ouvrant fermé ; pas de `~~` partiel au milieu d'un point | § « Déprécier une entrée » |
-| `canon.obsolete-missing` | ERROR | Une entrée barrée porte `— obsolète AAAA-MM-JJ : <raison>` | § « Déprécier une entrée » |
-| `canon.obsolete-unstruck` | ERROR | Une marque `— obsolète` n'apparaît que sur une entrée barrée | § « Déprécier une entrée » |
-| `canon.promotion` | ERROR | `(promu de MODEL)` seulement sur une entrée `[USER:…]` | § « Promouvoir » |
-| `canon.divers` | ERROR | Pas de `divers.md` | § « Où vit le canon » |
-| `canon.obsolete-before-entry` | WARN | Date d'obsolescence ≥ date de l'entrée | — (cohérence) |
-| `canon.unknown-ref` | WARN | Un `CANON:n` cité dans une entrée existe | — (cohérence) |
+| `canon.title` | ERROR | The file starts with `# <Theme>` | § "Initialize the canon" |
+| `canon.prose` | ERROR | No line outside an entry | § "Entry grammar" |
+| `canon.entry` | ERROR | Entry conforms to `entry-body` (ID in backticks, provenance `[USER:<name> date]` or `[MODEL date]`, non-empty point) | § "Entry grammar" |
+| `canon.date` | ERROR | Valid calendar dates | § "Entry grammar" |
+| `canon.duplicate-id` | ERROR | `CANON:n` unique **across the whole folder**, struck entries included (never reused) | § "Entry grammar" |
+| `canon.strike` | ERROR | Opening `~~` closed; no partial `~~` in the middle of a point | § "Deprecate an entry" |
+| `canon.obsolete-missing` | ERROR | A struck entry carries `— obsolete YYYY-MM-DD: <reason>` | § "Deprecate an entry" |
+| `canon.obsolete-unstruck` | ERROR | An `— obsolete` mark appears only on a struck entry | § "Deprecate an entry" |
+| `canon.promotion` | ERROR | `(promoted from MODEL)` only on a `[USER:…]` entry | § "Promote" |
+| `canon.misc` | ERROR | No `misc.md` | § "Where the canon lives" |
+| `canon.obsolete-before-entry` | WARN | Obsolescence date ≥ entry date | — (consistency) |
+| `canon.unknown-ref` | WARN | A `CANON:n` cited in an entry exists | — (consistency) |
 
-Hors de portée du validateur (non décidable mécaniquement) : « une phrase, deux au plus »,
-la légitimité d'une provenance `[USER]`, le choix du bon fichier thématique, le caractère
-« durable » d'une entrée.
+Out of the validator's reach (not decidable mechanically): "one sentence, two at most", the
+legitimacy of a `[USER]` provenance, choosing the right thematic file, whether an entry is "durable".
 
 ---
 
 ## 2. Roadmap — `.claude/roadmap.md`
 
-Source : roadmap-tracker, § « Grammaire du fichier ». Le validateur lit le **miroir
-versionné** `.claude/roadmap.md` (la source en mémoire auto,
-`~/.claude/projects/<projet>/memory/roadmap.md`, est hors repo et en est une copie
-identique, § « Où vit la roadmap »).
+Source: roadmap-tracker, § "File grammar". The validator reads the **versioned mirror**
+`.claude/roadmap.md` (the source in auto-memory, `~/.claude/projects/<project>/memory/roadmap.md`, is
+outside the repo and is an identical copy of it, § "Where the roadmap lives").
 
-### 2.1 Fichier
+### 2.1 File
 
 ```ebnf
 roadmap-file    = { blank-line } , "# Roadmap" , NL , { section } ;
@@ -136,119 +129,116 @@ section         = specs-section | milestone-section | backlog-section ;
 
 specs-section   = "## Specs" , NL , { blank-line | spec } , [ rules ] ;
 spec            = "- " , spec-id , SP , "**" , text , "**" , SP , "[" , spec-status , "]" , NL ,
-                  { continuation } ;           (* dont « - Canon : … » attendu *)
+                  { continuation } ;           (* with an expected "- Canon: …" sub-bullet *)
 spec-status     = "draft" | "active" | "retired" ;
-rules           = "Règles :" , NL , { "- " , text , NL , { continuation } | blank-line } ;
+rules           = "Rules:" , NL , { "- " , text , NL , { continuation } | blank-line } ;
 
 milestone-section = "## M" , number , " — " , text ,
                     " (`ROADMAP:MILESTONE:" , number , "`, " , ms-status , ")" , NL ,
                     { blank-line | description-line | dod-line | task } ;
 ms-status       = "planned" | "active" | "done" ;
-description-line = text , NL ;                 (* prose libre, décisions datées *)
-dod-line        = "DoD du milestone :" , SP , text , NL ;
+description-line = text , NL ;                 (* free prose, dated decisions *)
+dod-line        = "Milestone DoD:" , SP , text , NL ;
 
 backlog-section = "## Backlog (no milestone)" , NL , { blank-line | task } ;
 ```
 
-### 2.2 Tâche
+### 2.2 Task
 
 ```ebnf
 task        = "- [" , box , "] " , task-id , SP , title , [ SP , suffix ] , [ trailer ] , NL ,
               { continuation } ;
 box         = " " | "~" | "x" ;                (* todo · in_progress · done *)
 title       = [ prefix , SP ] , text ;
-prefix      = "[BUG]" | "[JALON]" | "[RÉCURRENT]" | "[FOND]" | "[RÉFLEXION]" ;
+prefix      = "[BUG]" | "[PLACEHOLDER]" | "[RECURRING]" | "[BACKGROUND]" | "[RESEARCH]" ;
 suffix      = "_(" , part , { "; " , part } , ")_" ;
 part        = "implements " , spec-id , { ", " , spec-id }
             | "depends on " , task-id-ref , { ", " , task-id-ref }
             | "claimed by " , text
-            | "blocked: " , text ;             (* toujours dernier : peut contenir « ; » *)
-trailer     = SP , text ;                      (* annotation datée après le suffixe, cf. A5 *)
+            | "blocked: " , text ;             (* always last: may contain ";" *)
+trailer     = SP , text ;                      (* dated annotation after the suffix, see A5 *)
 
 spec-id     = "`ROADMAP:SPEC:" , number , "`" | "ROADMAP:SPEC:" , number ;
-                                               (* avec backticks en tête de spec, sans dans le suffixe *)
+                                               (* with backticks at the head of a spec, without them in the suffix *)
 task-id     = "`ROADMAP:TASK:" , number , "`" ;
 task-id-ref = "ROADMAP:TASK:" , number ;
 ```
 
-Les éléments du suffixe apparaissent chacun au plus une fois, **dans l'ordre**
-`implements`, `depends on`, `claimed by`, `blocked:` (§ « Conventions »).
+Each suffix element appears at most once, **in this order**: `implements`, `depends on`, `claimed by`,
+`blocked:` (§ "Conventions").
 
-### 2.3 Règles vérifiées
+### 2.3 Checked rules
 
-| Code | Niveau | Règle | Source (roadmap-tracker) |
+| Code | Level | Rule | Source (roadmap-tracker) |
 |---|---|---|---|
-| `roadmap.title` | ERROR | Premier titre `# Roadmap` | « Structure du fichier » |
-| `roadmap.section` | ERROR | Sections `## Specs`, `## M<n> — …`, `## Backlog (no milestone)` uniquement | « Structure du fichier » |
-| `roadmap.spec` | ERROR | Spec conforme, statut `draft|active|retired` ; pas de puce libre avant `Règles :` | « Structure du fichier » |
-| `roadmap.milestone` | ERROR | En-tête de milestone conforme, statut `planned|active|done` | « Structure du fichier » |
-| `roadmap.task` / `roadmap.checkbox` | ERROR | Tâche conforme, case `[ ]`, `[~]` ou `[x]` | « Conventions » |
-| `roadmap.duplicate-id` | ERROR | IDs uniques **par famille** (SPEC, MILESTONE, TASK) | « Trois familles d'IDs stables » |
-| `roadmap.suffix` / `roadmap.suffix-order` / `roadmap.suffix-id` | ERROR | Suffixe `_( … )_` : éléments connus, ordre imposé, IDs complets de la bonne famille | « Conventions » |
-| `roadmap.unknown-ref` | ERROR | `implements` → spec existante ; `depends on` → tâche existante | « Ajouter une tâche » |
-| `roadmap.self-dependency` / `roadmap.dependency-cycle` | ERROR | Pas de dépendance circulaire (une tâche du cycle ne serait jamais débloquée) | « Prendre une tâche » |
-| `roadmap.claim-missing` | ERROR | `[~]` porte `claimed by <user>` **ou** `blocked: <raison>` | « Conventions », cf. A4 |
-| `roadmap.claim-on-done` | ERROR | `[x]` ne porte plus `claimed by` | « Terminer une tâche » |
-| `roadmap.milestone-done` | ERROR | Milestone `done` ⇒ toutes ses tâches `[x]` | « Conventions » |
-| `roadmap.dependency-not-done` | WARN | Tâche `[~]`/`[x]` dont une dépendance n'est pas `[x]` | « Prendre une tâche », cf. A6 |
-| `roadmap.claim-on-todo` | WARN | `[ ]` avec `claimed by` | « Conventions » |
-| `roadmap.blocked-not-in-progress` | WARN | `blocked:` hors `[~]` | « Conventions » |
-| `roadmap.title-prefix` | WARN | Préfixe de titre entre crochets hors liste normalisée | « Conventions » |
-| `roadmap.milestone-dod` | WARN | Milestone sans ligne `DoD du milestone :` | « Structure du fichier » |
-| `roadmap.milestone-number` | WARN | `M<k>` ≠ `ROADMAP:MILESTONE:<k>` | « Structure du fichier » (exemple) |
-| `roadmap.spec-canon` | WARN | Spec sans sous-puce `- Canon : …` | « Structure du fichier » |
-| `roadmap.bullet` | WARN | Puce non-tâche dans un milestone ou le backlog | « Structure du fichier » |
-| `roadmap.unknown-canon-ref` | WARN | Un `CANON:n` cité existe dans `.claude/canon/` | — (cohérence) |
+| `roadmap.title` | ERROR | First title `# Roadmap` | "File structure" |
+| `roadmap.section` | ERROR | Sections `## Specs`, `## M<n> — …`, `## Backlog (no milestone)` only | "File structure" |
+| `roadmap.spec` | ERROR | Spec conforms, status `draft|active|retired`; no free bullet before `Rules:` | "File structure" |
+| `roadmap.milestone` | ERROR | Milestone heading conforms, status `planned|active|done` | "File structure" |
+| `roadmap.task` / `roadmap.checkbox` | ERROR | Task conforms, box `[ ]`, `[~]` or `[x]` | "Conventions" |
+| `roadmap.duplicate-id` | ERROR | IDs unique **per family** (SPEC, MILESTONE, TASK) | "Three families of stable IDs" |
+| `roadmap.suffix` / `roadmap.suffix-order` / `roadmap.suffix-id` | ERROR | Suffix `_( … )_`: known elements, enforced order, full IDs of the right family | "Conventions" |
+| `roadmap.unknown-ref` | ERROR | `implements` → existing spec; `depends on` → existing task | "Add a spec / a milestone / a task" |
+| `roadmap.self-dependency` / `roadmap.dependency-cycle` | ERROR | No circular dependency (a task in the cycle would never be unblocked) | "Claim a task" |
+| `roadmap.claim-missing` | ERROR | `[~]` carries `claimed by <user>` **or** `blocked: <reason>` | "Conventions", see A4 |
+| `roadmap.claim-on-done` | ERROR | `[x]` no longer carries `claimed by` | "Complete a task" |
+| `roadmap.milestone-done` | ERROR | Milestone `done` ⇒ all its tasks `[x]` | "Conventions" |
+| `roadmap.dependency-not-done` | WARN | Task `[~]`/`[x]` with a dependency that is not `[x]` | "Claim a task", see A6 |
+| `roadmap.claim-on-todo` | WARN | `[ ]` with `claimed by` | "Conventions" |
+| `roadmap.blocked-not-in-progress` | WARN | `blocked:` outside `[~]` | "Conventions" |
+| `roadmap.title-prefix` | WARN | Bracketed title prefix outside the normalized list | "Conventions" |
+| `roadmap.milestone-dod` | WARN | Milestone without a `Milestone DoD:` line | "File structure" |
+| `roadmap.milestone-number` | WARN | `M<k>` ≠ `ROADMAP:MILESTONE:<k>` | "File structure" (example) |
+| `roadmap.spec-canon` | WARN | Spec without a `- Canon: …` sub-bullet | "File structure" |
+| `roadmap.bullet` | WARN | Non-task bullet in a milestone or the backlog | "File structure" |
+| `roadmap.unknown-canon-ref` | WARN | A `CANON:n` cited exists in `.claude/canon/` | — (consistency) |
 
 ---
 
-## 3. Manifestes et frontmatter (marketplace uniquement)
+## 3. Manifests and frontmatter (marketplace only)
 
-Ne concernent que le repo du marketplace ; ignorés ailleurs.
+These apply only to the marketplace repo; they are ignored elsewhere.
 
-| Code | Niveau | Règle |
+| Code | Level | Rule |
 |---|---|---|
-| `manifest.json` | ERROR | `.claude-plugin/marketplace.json` et chaque `plugins/*/.claude-plugin/plugin.json` se chargent en JSON (`CANON:4`) |
-| `manifest.plugin-name` / `manifest.plugin-version` | ERROR | `plugin.json` : `name` non vide, `version` semver 2.0 |
-| `manifest.marketplace-*` | ERROR | `marketplace.json` : `name`, `owner.name`, `plugins[]` avec `name` + `source` ; `version` semver si présente ; source locale en `./…` contenant un `plugin.json` |
-| `manifest.name-mismatch` / `manifest.version-mismatch` | ERROR | Nom (et version si l'entrée en porte une) de l'entrée catalogue = ceux du `plugin.json` pointé |
-| `manifest.unlisted-plugin` | WARN | Plugin sous `plugins/` absent du catalogue |
-| `frontmatter.syntax` | ERROR | `plugins/*/agents/*.md` et `plugins/*/skills/*/SKILL.md` commencent par un frontmatter `---` … `---` lisible |
-| `frontmatter.name` / `frontmatter.description` | ERROR | Champs présents et non vides |
-| `frontmatter.model` | ERROR | `model` ∈ {`opus`, `sonnet`, `haiku`, `fable`, `inherit`} ou ID `claude-*` |
-| `plugin.model-mention` | ERROR | Nom de modèle (`opus`, `sonnet`, `haiku`, `fable`, mot entier, casse ignorée) dans un `.md` ou `.json` sous `plugins/`, hors de la ligne `model:` d'un frontmatter d'agent (`CANON:35`) |
-| `frontmatter.effort` | ERROR | `effort` ∈ {`low`, `medium`, `high`, `xhigh`, `max`} (`CANON:11`) |
-| `frontmatter.mascot` | WARN | `mascot` d'un agent ∈ {`scribe`, `chef`, `artiste`, `inspecteur`, `coursier`, `artisan`, `savant`, `mage`, `nu`} : mascotte du bandeau `session-recap`, que Claude Code ignore |
-| `frontmatter.plugin-agent-ignored` | WARN | `hooks`, `mcpServers`, `permissionMode` dans un agent de plugin : ignorés par Claude Code (`CANON:11`) |
-| `frontmatter.name-format` / `frontmatter.name-dir` | WARN | `name` en kebab-case ; `name` d'un skill = nom de son dossier |
+| `manifest.json` | ERROR | `.claude-plugin/marketplace.json` and each `plugins/*/.claude-plugin/plugin.json` load as JSON (`CANON:3`) |
+| `manifest.plugin-name` / `manifest.plugin-version` | ERROR | `plugin.json`: `name` non-empty, `version` semver 2.0 |
+| `manifest.marketplace-*` | ERROR | `marketplace.json`: `name`, `owner.name`, `plugins[]` with `name` + `source`; `version` semver if present; local source as `./…` containing a `plugin.json` |
+| `manifest.name-mismatch` / `manifest.version-mismatch` | ERROR | Name (and version, if the catalog entry carries one) of the catalog entry = those of the `plugin.json` it points to |
+| `manifest.unlisted-plugin` | WARN | Plugin under `plugins/` missing from the catalog |
+| `frontmatter.syntax` | ERROR | `plugins/*/agents/*.md` and `plugins/*/skills/*/SKILL.md` start with a readable `---` … `---` frontmatter |
+| `frontmatter.name` / `frontmatter.description` | ERROR | Fields present and non-empty |
+| `frontmatter.model` | ERROR | `model` ∈ {`opus`, `sonnet`, `haiku`, `fable`, `inherit`} or a `claude-*` ID |
+| `plugin.model-mention` | ERROR | Model name (`opus`, `sonnet`, `haiku`, `fable`, whole word, case ignored) in a `.md` or `.json` under `plugins/`, outside the `model:` line of an agent's frontmatter (`CANON:22`) |
+| `frontmatter.effort` | ERROR | `effort` ∈ {`low`, `medium`, `high`, `xhigh`, `max`} (`CANON:6`) |
+| `frontmatter.mascot` | WARN | `mascot` of an agent ∈ {`scribe`, `chef`, `artist`, `inspector`, `courier`, `artisan`, `scholar`, `mage`, `bare`}: mascot of the `agents-info` band, which Claude Code ignores |
+| `frontmatter.plugin-agent-ignored` | WARN | `hooks`, `mcpServers`, `permissionMode` in a plugin agent: ignored by Claude Code (`CANON:6`) |
+| `frontmatter.name-format` / `frontmatter.name-dir` | WARN | `name` in kebab-case; a skill's `name` = its folder name |
 
-Le frontmatter est lu par un mini-parseur YAML (clés de premier niveau, scalaires simples ou
-entre guillemets, blocs `|`/`>`, commentaires) : suffisant pour ces fichiers, sans
-dépendance à PyYAML.
+The frontmatter is read by a mini YAML parser (top-level keys, plain or quoted scalars, `|`/`>`
+blocks, comments): enough for these files, with no dependency on PyYAML.
 
 ---
 
-## 4. Points ambigus des SKILL.md (non tranchés, les deux lectures sont acceptées)
+## 4. Ambiguous points in the SKILL.md files (unsettled; both readings are accepted)
 
-- **A1 — Que barre-t-on ?** canon-tracker, § « Déprécier » dit « barrer le texte (`~~…~~`) » ;
-  l'exemple de § « Grammaire d'une entrée » barre **toute** l'entrée, ID et provenance
-  compris. Le validateur accepte `~~`CANON:n` [...] point~~` et `` `CANON:n` [...] ~~point~~ ``.
-- **A2 — Où va la marque d'obsolescence ?** « en dessous ou en fin de ligne » : les deux sont
-  acceptés (continuation indentée ou même ligne logique).
-- **A3 — Sous-titres dans un fichier canon.** Rien ne les autorise ni ne les interdit
-  explicitement ; « jamais de prose flottante » vise les paragraphes. Les lignes `#…` sont
-  tolérées.
-- **A4 — Tâche bloquée.** « `[~]` toujours accompagné de `claimed by` » vs « une tâche bloquée
-  reste `[~]` avec `blocked:` » : `blocked:` exige-t-il aussi `claimed by` ? Le validateur
-  accepte `[~]` avec l'un **ou** l'autre.
-- **A5 — Texte après le suffixe.** La roadmap réelle porte des annotations datées après
-  `)_` (« — décision 2026-09-24 : retiré (CANON:10) »). La grammaire ne les prévoit pas mais
-  « les décisions de portée se datent dans le texte » ; elles sont acceptées.
-- **A6 — Dépendance non terminée.** La règle de claim (« si une dépendance n'est pas done :
-  le signaler et s'arrêter ») est une règle d'opération, pas de grammaire, et la roadmap
-  réelle contient des exceptions décidées par l'utilisateur (TASK:10 fait « par
-  anticipation ») : avertissement, pas erreur.
-- **A7 — Nom dans `[USER:<nom>]`.** Aucun jeu de caractères n'est fixé ; tout texte sans `]`
-  est accepté (espaces internes compris).
-- **A8 — Tiret de la marque d'obsolescence.** Le SKILL écrit `—` (tiret cadratin) ; seul ce
-  caractère est reconnu. Un `-` ou `--` produit `canon.obsolete-missing`.
+- **A1 — What is struck through?** canon-tracker, § "Deprecate an entry" says "strike through the text
+  (`~~…~~`)"; the example in § "Entry grammar" strikes through **the whole** entry, ID and provenance
+  included. The validator accepts `~~`CANON:n` [...] point~~` and `` `CANON:n` [...] ~~point~~ ``.
+- **A2 — Where does the obsolescence mark go?** "add below it or at the end of the line": both are
+  accepted (indented continuation or same logical line).
+- **A3 — Sub-headings in a canon file.** Nothing explicitly allows or forbids them; "never floating
+  prose" targets paragraphs. Lines `#…` are tolerated.
+- **A4 — Blocked task.** "`[~]` always accompanied by `claimed by`" vs "a blocked task stays `[~]` with
+  `blocked:`": does `blocked:` also require `claimed by`? The validator accepts `[~]` with one **or**
+  the other.
+- **A5 — Text after the suffix.** The real roadmap carries dated annotations after `)_` ("— decision
+  2026-09-24: retired"). The grammar does not provide for them, but "scope decisions are
+  dated in the text"; they are accepted.
+- **A6 — Unfinished dependency.** The claim rule ("if a dependency is not done: report it and stop")
+  is an operation rule, not grammar, and the real roadmap contains exceptions decided by the user
+  (TASK:10 done "in advance"): warning, not error.
+- **A7 — Name in `[USER:<name>]`.** No character set is fixed; any text without `]` is accepted
+  (internal spaces included).
+- **A8 — Dash of the obsolescence mark.** The SKILL writes `—` (em dash); only this character is
+  recognized. A `-` or `--` produces `canon.obsolete-missing`.

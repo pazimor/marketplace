@@ -1,152 +1,149 @@
 ---
 name: roadmap-tracker
-description: Tenir la roadmap du projet dans un fichier markdown de la mémoire native (specs, milestones avec DoD, tâches à IDs stables, claims). Utiliser dès que l'utilisateur parle de roadmap, backlog, milestone, spec, tâche ou avancement — ajouter/modifier une entrée, prendre ou continuer une tâche, marquer terminé, demander où on en est — même si le mot « roadmap » n'est pas prononcé explicitement.
+description: Keep the project roadmap in a markdown file in native memory (specs, milestones with DoD, tasks with stable IDs, claims). Use whenever the user talks about roadmap, backlog, milestone, spec, task or progress — adding or editing an entry, claiming or continuing a task, marking something done, asking where things stand — even when the word "roadmap" is not said explicitly.
 ---
 
-# Roadmap tracker — la roadmap comme fichier mémoire
+# Roadmap tracker — the roadmap as a memory file
 
-La roadmap vit dans un fichier markdown à grammaire stricte. La spec fait
-foi, le fichier est l'état, et l'avancement se rapporte en éditant ce
-fichier — de façon chirurgicale, sans jamais casser sa grammaire.
+The roadmap lives in a markdown file with a strict grammar. The spec is
+authoritative, the file is the state, and progress is reported by editing
+this file — surgically, without ever breaking its grammar.
 
-## Où vit la roadmap
+## Where the roadmap lives
 
-- **Source de vérité** : `roadmap.md` dans le dossier de mémoire auto du
-  projet — `~/.claude/projects/<projet>/memory/roadmap.md`. Localiser le
-  dossier avec `ls -d ~/.claude/projects/*` (le nom dérive du chemin du
-  repo) ; en cas de doute, la commande `/memory` liste les fichiers chargés.
-- **Miroir versionné** : après CHAQUE modification, recopier le fichier à
-  l'identique dans le repo sous `.claude/roadmap.md` (créer au besoin).
-  C'est ce miroir, commité avec le projet, qui suit les changements de
-  machine.
-- **Amorçage sur une nouvelle machine** : si la mémoire auto n'a pas de
-  `roadmap.md` mais que le repo contient `.claude/roadmap.md`, copier le
-  fichier du repo vers la mémoire auto avant toute opération — le plus récent des deux
-  gagne (comparer les dates de modification, signaler tout conflit).
+- **Source of truth**: `roadmap.md` in the project's auto-memory folder —
+  `~/.claude/projects/<project>/memory/roadmap.md`. Locate the folder with
+  `ls -d ~/.claude/projects/*` (the name derives from the repo path); when in
+  doubt, the `/memory` command lists the loaded files.
+- **Versioned mirror**: after EVERY change, copy the file verbatim into the
+  repo under `.claude/roadmap.md` (create it if needed). This mirror, committed
+  with the project, is what carries changes from one machine to another.
+- **Bootstrapping on a new machine**: if the auto-memory has no `roadmap.md`
+  but the repo contains `.claude/roadmap.md`, copy the repo file to the
+  auto-memory before any operation — the more recent of the two wins (compare
+  modification dates, report any conflict).
 
-## Grammaire du fichier (ne jamais s'en écarter)
+## File grammar (never deviate from it)
 
-Trois familles d'IDs stables, numérotées en croissant, **jamais renumérotées
-ni réutilisées** même après suppression :
+Three families of stable IDs, numbered in ascending order, **never renumbered
+or reused**, even after deletion:
 `ROADMAP:SPEC:n`, `ROADMAP:MILESTONE:n`, `ROADMAP:TASK:n`.
 
-Structure du fichier :
+File structure:
 
 ```markdown
 # Roadmap
 
 ## Specs
 
-- `ROADMAP:SPEC:1` **Titre de la spec** [draft|active|retired]
-  - Canon : <le design tranché, les références aux docs du repo>
+- `ROADMAP:SPEC:1` **Spec title** [draft|active|retired]
+  - Canon: <the settled design, references to the repo's docs>
 
-Règles :
-- <règle 1>
-- <règle 2>
+Rules:
+- <rule 1>
+- <rule 2>
 
-## M1 — Titre du milestone (`ROADMAP:MILESTONE:1`, planned|active|done)
+## M1 — Milestone title (`ROADMAP:MILESTONE:1`, planned|active|done)
 
-<Description : pourquoi ce milestone, décisions de portée datées.>
+<Description: why this milestone, dated scope decisions.>
 
-DoD du milestone : <critère observable et rejouable de bout en bout.>
+Milestone DoD: <observable, end-to-end replayable criterion.>
 
-- [x] `ROADMAP:TASK:1` Titre _(implements ROADMAP:SPEC:1)_
-- [ ] `ROADMAP:TASK:2` Titre _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:1)_
-- [~] `ROADMAP:TASK:3` Titre _(claimed by <user>)_
+- [x] `ROADMAP:TASK:1` Title _(implements ROADMAP:SPEC:1)_
+- [ ] `ROADMAP:TASK:2` Title _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:1)_
+- [~] `ROADMAP:TASK:3` Title _(claimed by <user>)_
 
 ## Backlog (no milestone)
 
-- [ ] `ROADMAP:TASK:4` Titre
+- [ ] `ROADMAP:TASK:4` Title
 ```
 
-Conventions :
+Conventions:
 
-- Cases : `[ ]` todo · `[~]` in_progress (toujours accompagné de
-  `_(claimed by <user>)_`) · `[x]` done. Une tâche bloquée reste `[~]` avec
-  `_(blocked: <raison>)_` dans le suffixe.
-- Le suffixe italique regroupe, dans cet ordre et séparés par `; ` :
+- Checkboxes: `[ ]` todo · `[~]` in_progress (always accompanied by
+  `_(claimed by <user>)_`) · `[x]` done. A blocked task stays `[~]` with
+  `_(blocked: <reason>)_` in its suffix.
+- The italic suffix groups, in this order and separated by `; `:
   `implements <SPEC...>`, `depends on <TASK...>`, `claimed by <user>`,
-  `blocked: <raison>`.
-- Préfixes de titre normalisés : `[BUG]`, `[JALON]` (placeholder non
-  détaillé), `[RÉCURRENT]`, `[FOND]` (tâche de fond), `[RÉFLEXION]`.
-  Le type implicite d'une tâche sans préfixe est `feature`.
-- Les décisions de portée se datent dans le texte
-  (« décision commanditaire 2026-07-30 ») — la roadmap porte son historique.
-- Un milestone passe `done` quand toutes ses tâches sont `[x]` ; le noter
-  dans son en-tête sans rien supprimer.
+  `blocked: <reason>`.
+- Normalized title prefixes: `[BUG]`, `[PLACEHOLDER]` (undetailed placeholder),
+  `[RECURRING]`, `[BACKGROUND]` (background task), `[RESEARCH]`. The implicit
+  type of a task without a prefix is `feature`.
+- Scope decisions are dated in the text ("sponsor decision 2026-07-30") — the
+  roadmap carries its own history.
+- A milestone becomes `done` once all its tasks are `[x]`; note it in its
+  header without deleting anything.
 
-## Opérations courantes
+## Common operations
 
-**« Où on en est ? »** — lire le fichier, répondre avec : milestones et leur
-ratio done, tâches `[~]` claimées, prochaines tâches débloquées (toutes
-dépendances `[x]`). Ne pas paraphraser tout le fichier.
+**"Where do we stand?"** — read the file and answer with: milestones and their
+done ratio, `[~]` tasks claimed, next unblocked tasks (all dependencies `[x]`).
+Do not paraphrase the whole file.
 
-**Ajouter une spec / un milestone / une tâche** — prendre le prochain numéro
-libre de la famille, respecter la grammaire, raccrocher la tâche à son
-milestone et sa spec (`implements`), déclarer ses `depends_on`. Une idée non
-rattachée va en Backlog. Ne jamais réécrire les entrées existantes au
-passage.
+**Add a spec / a milestone / a task** — take the next free number in the
+family, follow the grammar, attach the task to its milestone and spec
+(`implements`), declare its `depends_on`. An unattached idea goes to the
+Backlog. Never rewrite existing entries along the way.
 
-**Prendre une tâche (claim)** — choisir la tâche demandée, sinon une `todo`
-dont toutes les dépendances sont `[x]`. Si une dépendance n'est pas done :
-le signaler et s'arrêter. Marquer `[~]` + `claimed by <user>`, puis suivre
-« Implémenter une tâche ».
+**Claim a task** — choose the requested task, otherwise a `todo` whose
+dependencies are all `[x]`. If a dependency is not done, report it and stop.
+Mark `[~]` + `claimed by <user>`, then follow "Implementing a task".
 
-**Terminer une tâche** — dérouler la Definition of Done de son type
-(ci-dessous) avec preuves. Tout passe → `[x]` (retirer le `claimed by`).
-Sinon → la tâche reste `[~]`, dire précisément ce qui manque.
+**Complete a task** — run through the Definition of Done for its type (below),
+with evidence. Everything passes → `[x]` (remove the `claimed by`). Otherwise →
+the task stays `[~]`; state precisely what is missing.
 
-**Toujours finir par** : recopier le fichier vers le miroir
-`.claude/roadmap.md` du repo, et rappeler qu'il reste à committer.
+**Always finish with**: copy the file to the repo's mirror `.claude/roadmap.md`,
+and remind the user it still needs to be committed.
 
-## Implémenter une tâche
+## Implementing a task
 
-1. **Spec d'abord** : lire la ou les specs de la tâche et les docs du repo
-   qu'elles citent. La spec a déjà tranché le design — l'implémentation ne
-   re-décide pas. Point bloquant ambigu : question à l'utilisateur ou
-   marquage `blocked`, jamais une invention.
-2. **Canon du projet** : passer la gate de lecture du skill `canon-tracker`
-   (`.claude/canon/`) avant de choisir une approche — une entrée `[USER]`
-   peut invalider un plan.
-3. **Plan (gate)** : découper en incréments vérifiables — chaque incrément a
-   un critère de succès objectif (test, commande, comportement démontré).
-   Ordre par défaut : contrats/schémas → logique → interfaces → UI → docs.
-   **Présenter le plan et attendre le feu vert avant d'écrire du code.**
-4. **Incréments** : un incrément dont la vérification ne passe pas n'est pas
-   fait. Modifications chirurgicales. Ne pas committer — le working tree
-   revient à l'utilisateur.
-5. **Clôture** : DoD + mise à jour du fichier + miroir (cf. ci-dessus).
-   Écart constaté entre spec et réalité du code : le rapporter comme
-   proposition d'amendement de la spec, ne pas corriger la spec d'office.
+1. **Spec first**: read the task's spec(s) and the repo docs they cite. The
+   spec has already settled the design — the implementation does not re-decide
+   it. An ambiguous blocking point: ask the user, or mark `blocked` — never
+   invent.
+2. **Project canon**: pass the read gate of the `canon-tracker` skill
+   (`.claude/canon/`) before choosing an approach — a `[USER]` entry can
+   invalidate a plan.
+3. **Plan (gate)**: split the work into verifiable increments — each increment
+   has an objective success criterion (test, command, demonstrated behavior).
+   Default order: contracts/schemas → logic → interfaces → UI → docs. **Present
+   the plan and wait for the go-ahead before writing any code.**
+4. **Increments**: an increment whose verification does not pass is not done.
+   Make surgical changes. Do not commit — the working tree goes back to the
+   user.
+5. **Wrap-up**: DoD + file update + mirror (see above). If a gap is found
+   between the spec and the actual code, report it as a proposed amendment to
+   the spec; do not correct the spec unilaterally.
 
-## Definition of Done par type
+## Definition of Done by type
 
-Chaque critère se **démontre** (commande exécutée, sortie citée), il ne
-s'affirme pas.
+Each criterion must be **demonstrated** (command run, output quoted), not
+asserted.
 
-**feature** — critères de la spec rejouables un par un ; tests ciblés verts ;
-typecheck/lint vert sur le périmètre touché ; aucune dépendance non-done.
+**feature** — spec criteria replayable one by one; targeted tests green;
+typecheck/lint green on the touched scope; no dependency left undone.
 
-**bug** — reproduction capturée AVANT le fix ; test de non-régression ajouté
-et vert ; suite du module touchée verte.
+**bug** — reproduction captured BEFORE the fix; regression test added and
+green; test suite of the touched module green.
 
-**test** — les nouveaux tests échouent si on retire le comportement testé
-(mutation rapide ou justification précise) ; suite complète du module verte.
+**test** — the new tests fail when the tested behavior is removed (quick
+mutation, or a precise justification); full module test suite green.
 
-**doc** — extraits et commandes exécutés tels quels ; chemins et noms cités
-vérifiés, pas supposés.
+**doc** — excerpts and commands run as written; cited paths and names checked,
+not assumed.
 
-**infra / chore** — commande de build/migration exécutée avec succès (sortie
-citée), sinon limite signalée et tâche laissée `[~]` ; rollback ou
-idempotence vérifié quand pertinent.
+**infra / chore** — build/migration command run successfully (output quoted);
+otherwise the limitation is reported and the task left `[~]`; rollback or
+idempotence verified when relevant.
 
-## Garde-fous
+## Guardrails
 
-- Le fichier est la seule source de vérité : pas d'état d'avancement gardé
-  « de tête » ou dans la conversation seulement.
-- Éditions minimales : changer une case, un suffixe ou ajouter une entrée —
-  jamais de réécriture globale, jamais de renumérotation.
-- Une vérification non exécutable (service externe, secret manquant) ne se
-  coche pas sur parole : elle se remonte à l'utilisateur.
-- Si le fichier est introuvable des deux côtés, proposer d'en initialiser un
-  vide à la grammaire ci-dessus — ne jamais inventer un historique.
+- The file is the only source of truth: no progress state held mentally or in
+  the conversation alone.
+- Minimal edits: change a checkbox or a suffix, or add an entry — never a
+  global rewrite, never a renumbering.
+- A check that cannot be run (external service, missing secret) is not ticked
+  on trust alone: it is escalated to the user.
+- If the file cannot be found on either side, offer to initialize an empty one
+  that follows the grammar above — never invent a history.
