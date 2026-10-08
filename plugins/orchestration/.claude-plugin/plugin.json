@@ -1,9 +1,8 @@
 {
   "name": "orchestration",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Roadmap and canon as files for Claude Code — canon specs, milestones with DoD, tasks with stable IDs and claims (.claude/roadmap.md), canon with [USER]/[MODEL] provenance (.claude/canon/), the scribe agent (it keeps canon + roadmap, on the most economical model), the orchestrator agent (it delegates each task to the most economical model that an independent check can verify, escalates model or effort on failure, and reports back, without coding), three equal peers alongside the main agent, and its executors by effort level. No MCP server: portable via git.",
   "author": {
-    "name": "eddy-hummel",
-    "email": "eddy.hummel@gmail.com"
+    "name": "pazimor"
   }
 }

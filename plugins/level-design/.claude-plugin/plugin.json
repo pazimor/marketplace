@@ -1,10 +1,9 @@
 {
   "name": "level-design",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "3D level design taste and method for Claude Code — reading the brief, dials, bans on the AI's defaults, measurable pre-flight (skill level-design-taste), build procedure spec → idempotent pass → audit → screenshots (skill level-design-build), and the level-design-reviewer agent that judges on screenshots. Engine-agnostic: the engine specifics live in the project's canon.",
   "author": {
-    "name": "eddy-hummel",
-    "email": "eddy.hummel@gmail.com"
+    "name": "pazimor"
   },
   "keywords": [
     "level-design",

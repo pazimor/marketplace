@@ -53,11 +53,11 @@ Full example (`.claude/canon/tests.md`):
 ```markdown
 # Tests
 
-- `CANON:12` [USER:eddy 2026-08-14] The suite runs with `pytest -q` from the
+- `CANON:12` [USER:pazimor 2026-08-14] The suite runs with `pytest -q` from the
   repo root; never from a subfolder (the fixtures break).
 - `CANON:13` [MODEL 2026-08-14] `pytest -q tests/test_graph.py` takes ~40 s: the
   first call downloads the model, the following ones are instant.
-- `CANON:14` [USER:eddy 2026-08-20] A test that touches the network is rejected in
+- `CANON:14` [USER:pazimor 2026-08-20] A test that touches the network is rejected in
   review, even when marked `skip`. (promoted from MODEL)
 - ~~`CANON:9` [MODEL 2026-07-02] Tests run via `make test`.~~
   — obsolete 2026-08-14: `make test` was removed, replaced by `CANON:12`.

@@ -1,10 +1,9 @@
 {
   "name": "agents-info",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Agents info Mod (Claude Code 2.1.287, Mods API in early access): starting agent, timeline of agents per prompt (new, resumed, forked), resolved model and effort of each, tokens per agent × model × effort, 5 h / 7 day limits with forecast, alerts. Read-only: alters and blocks nothing.",
   "author": {
-    "name": "eddy-hummel",
-    "email": "eddy.hummel@gmail.com"
+    "name": "pazimor"
   },
   "types": "./types/index.d.ts",
   "userConfig": {

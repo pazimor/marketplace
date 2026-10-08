@@ -1,11 +1,10 @@
 {
   "name": "marketplace",
   "owner": {
-    "name": "eddy-hummel",
-    "email": "eddy.hummel@gmail.com"
+    "name": "pazimor"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a agents-info mod, for Claude Code",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "plugins": [
     {
       "name": "orchestration",
