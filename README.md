@@ -57,7 +57,7 @@ flowchart TB
 - **Validator** — `python3 scripts/validate.py <project>` checks the canon and roadmap grammar of any project.
 
 ```markdown
-- `CANON:12` [USER:eddy 2026-08-14] The suite runs with `pytest -q` from the repo root.
+- `CANON:12` [USER:pazimor 2026-08-14] The suite runs with `pytest -q` from the repo root.
 - `CANON:13` [MODEL 2026-08-14] The first run of `tests/test_graph.py` takes ~40 s.
 ```
 

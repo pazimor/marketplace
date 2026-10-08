@@ -20,10 +20,10 @@ VALID_CANON = {
     "tests.md": """\
         # Tests
 
-        - `CANON:12` [USER:eddy 2026-08-14] The suite runs with `pytest -q` from the
+        - `CANON:12` [USER:pazimor 2026-08-14] The suite runs with `pytest -q` from the
           repo root; never from a subfolder (the fixtures break).
         - `CANON:13` [MODEL 2026-08-14] `pytest -q tests/test_graph.py` takes ~40 s.
-        - `CANON:14` [USER:eddy 2026-08-20] A test that touches the network is rejected in
+        - `CANON:14` [USER:pazimor 2026-08-20] A test that touches the network is rejected in
           review, even when marked `skip`. (promoted from MODEL)
         - ~~`CANON:9` [MODEL 2026-07-02] The tests run via `make test`.~~
           — obsolete 2026-08-14: `make test` was removed, replaced by `CANON:12`.
@@ -31,7 +31,7 @@ VALID_CANON = {
     "invariants.md": """\
         # Invariants
 
-        - `CANON:1` [USER:eddy 2026-09-01] No dependency on a third-party service.
+        - `CANON:1` [USER:pazimor 2026-09-01] No dependency on a third-party service.
         - `CANON:2` [MODEL 2026-09-01] ~~Only the point is struck through.~~ — obsolete 2026-09-02: replaced by `CANON:1`.
         """,
     "expectations.md": "# Expectations\n",
@@ -63,7 +63,7 @@ VALID_ROADMAP = """\
 
     Milestone DoD: other criterion.
 
-    - [~] `ROADMAP:TASK:3` Title _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:1, ROADMAP:TASK:2; claimed by eddy)_
+    - [~] `ROADMAP:TASK:3` Title _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:1, ROADMAP:TASK:2; claimed by pazimor)_
     - [~] `ROADMAP:TASK:4` Title _(blocked: waiting for an answer; with a semicolon)_
     - [ ] `ROADMAP:TASK:5` Title _(depends on ROADMAP:TASK:3)_
 
@@ -108,7 +108,7 @@ class Fixture:
         self.root = Path(self.tmp.name)
         self.write(".claude-plugin/marketplace.json", json.dumps({
             "name": "marketplace",
-            "owner": {"name": "eddy"},
+            "owner": {"name": "pazimor"},
             "version": "0.3.0",
             "plugins": [{"name": "orchestration", "source": "./plugins/orchestration", "description": "x"}],
         }))
@@ -165,7 +165,7 @@ class TestValidFixture(Base):
     def test_main_exit_codes(self):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(validate.main([str(self.fx.root)]), 0)
-            self.fx.replace(".claude/roadmap.md", "claimed by eddy", "")
+            self.fx.replace(".claude/roadmap.md", "claimed by pazimor", "")
             self.assertEqual(validate.main([str(self.fx.root)]), 1)
             self.assertEqual(validate.main([str(self.fx.root / "absent")]), 2)
 
@@ -365,8 +365,8 @@ class TestCanon(Base):
 
     def test_obsolete_without_strike(self):
         self.fx.replace(".claude/canon/invariants.md",
-                        "- `CANON:1` [USER:eddy 2026-09-01] No dependency on a third-party service.",
-                        "- `CANON:1` [USER:eddy 2026-09-01] No dependency. — obsolete 2026-09-02: reason")
+                        "- `CANON:1` [USER:pazimor 2026-09-01] No dependency on a third-party service.",
+                        "- `CANON:1` [USER:pazimor 2026-09-01] No dependency. — obsolete 2026-09-02: reason")
         self.assertError("canon.obsolete-unstruck")
 
     def test_unclosed_strike(self):
@@ -398,9 +398,9 @@ class TestCanon(Base):
         self.fx.write(".claude/canon/expectations.md", dedent("""\
             # Expectations
 
-            - ~~`CANON:6` [USER:eddy 2026-09-01] Nothing from the legacy (market-mem, plugin memory) is dismantled before validation (ROADMAP:TASK:8).~~
+            - ~~`CANON:6` [USER:pazimor 2026-09-01] Nothing from the legacy (market-mem, plugin memory) is dismantled before validation (ROADMAP:TASK:8).~~
               — obsolete 2026-09-24: user decision; replaced by `CANON:7`.
-            - ~~`CANON:7` [USER:eddy 2026-09-24] The plugin memory is removed.~~
+            - ~~`CANON:7` [USER:pazimor 2026-09-24] The plugin memory is removed.~~
               — obsolete 2026-09-24: the explicit decision has come, replaced by `CANON:1`.
             """))
         self.assertEqual(self.run_validate().findings, [])
@@ -442,7 +442,7 @@ class TestRoadmap(Base):
         self.assertError("roadmap.suffix-id")
 
     def test_in_progress_without_claim(self):
-        self.fx.replace(self.RM, "; claimed by eddy", "")
+        self.fx.replace(self.RM, "; claimed by pazimor", "")
         self.assertError("roadmap.claim-missing")
 
     def test_in_progress_blocked_without_claim_ok(self):
@@ -451,7 +451,7 @@ class TestRoadmap(Base):
 
     def test_done_with_claim(self):
         self.fx.replace(self.RM, "Title _(implements ROADMAP:SPEC:1)_",
-                        "Title _(implements ROADMAP:SPEC:1; claimed by eddy)_")
+                        "Title _(implements ROADMAP:SPEC:1; claimed by pazimor)_")
         self.assertError("roadmap.claim-on-done")
 
     def test_suffix_order(self):

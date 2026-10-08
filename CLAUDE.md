@@ -28,12 +28,12 @@ plugins/level-design/
 ├── .claude-plugin/plugin.json      # plugin semver version
 ├── agents/level-design-reviewer.md # judges from screenshots (read-only)
 └── skills/{level-design-taste,level-design-build}/  # SKILL.md + references/
-plugins/agents-info/                # Mod (function hooks, API in early access, `CANON:14`)
+plugins/agents-info/                # Mod (function hooks, API in early access, `CANON:56`)
 ├── .claude-plugin/plugin.json      # version, options (`userConfig`), `types` contract
 ├── hooks/{hooks.json,register.tsx,recap.ts}   # hooks module + pure model
 ├── types/index.d.ts                # state declared to the engine (PluginState)
 └── tests/                          # `claude plugin test plugins/agents-info`
-.claude/types/                      # engine declarations (2.1.287), regenerated on each version
+.claude/types/                      # engine declarations (2.1.287), regenerated locally on each version, untracked
 docs/grammar.md                     # canon + roadmap grammar in EBNF (describes the SKILL.md files, does not decide them)
 docs/mascots-preview.html           # band mascots (scripts/preview-mascots.mts)
 docs/agents-info-preview.{html,svg} # README band, drawn by the Mod's code (scripts/preview-agents-info.mts)
