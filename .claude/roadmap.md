@@ -87,6 +87,9 @@ retrouve ces contraintes avant de coder.
 - [x] `ROADMAP:TASK:6` Rituel de capture à la clôture : distinction [USER]/[MODEL], l'utilisateur prime, promotion sur confirmation _(implements ROADMAP:SPEC:2, ROADMAP:SPEC:3; depends on ROADMAP:TASK:3, ROADMAP:TASK:5)_
 - [x] `ROADMAP:TASK:7` Gate de lecture : canon + roadmap chargés obligatoirement avant toute action de code _(implements ROADMAP:SPEC:2; depends on ROADMAP:TASK:3)_
 - [ ] `ROADMAP:TASK:8` Valider le workflow complet en usage réel sur le projet de jeu et ajuster les skills _(implements ROADMAP:SPEC:3; depends on ROADMAP:TASK:5, ROADMAP:TASK:6, ROADMAP:TASK:7)_
+- [x] `ROADMAP:TASK:35` Mesurer en session neuve le gain de `disallowedTools` (préfixe du premier appel d'un exécutant, avant/après) et vérifier que les agents livrés par un plugin le respectent _(implements ROADMAP:SPEC:3)_ — fait 2026-10-08 : relevé après redémarrage de l'app (exécutant ~45k contre ~60k avant, soit −25 % ; scribe ~49k, orchestrateur ~53k) ; agents livrés par un plugin respectant `disallowedTools` (`CANON:48` à `CANON:50`)
+- [ ] `ROADMAP:TASK:36` Refaire le micro-benchmark de cadrage de `ROADMAP:TASK:24` avec la génération 5.5 du modèle le plus économe (le relevé de TASK:24 portait sur l'ancienne) _(implements ROADMAP:SPEC:3; depends on ROADMAP:TASK:24)_
+- [ ] `ROADMAP:TASK:37` [RÉFLEXION] Évaluer un exécutant unique avec `effort` passé à l'appel (2.1.293+) à la place des cinq `executant-*` _(implements ROADMAP:SPEC:3)_
 
 ## M3 — Démantèlement du legacy (`ROADMAP:MILESTONE:3`, done)
 
@@ -135,7 +138,8 @@ s'installe depuis le marketplace avec la version de Claude Code testée dans sa 
 - [x] `ROADMAP:TASK:31` Phase 5 : packaging dans le marketplace, options du plugin, installation _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — fait 2026-10-02 : entrée catalogue, marketplace 0.7.0, CHANGELOG, README, CLAUDE.md, smoke test d'installation en HOME vierge
 - [x] `ROADMAP:TASK:32` Retirer la sonde `~/.claude/skills/session-recap/` (échafaudage créé le 2026-10-02 pour générer `.claude/types/`) dès que le vrai plugin vit dans le repo _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — fait 2026-10-02 : supprimée (elle occupait `/session-recap` dans les sessions Desktop)
 - [ ] `ROADMAP:TASK:33` Vérifier le rendu du panneau `/session-recap` et du bandeau dans Claude Code Desktop une fois l'app en 2.1.287 (elle embarque 2.1.284) ; relever la `surface` _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_
-- [ ] `ROADMAP:TASK:34` Tester en session réelle le correctif 0.7.2 du bandeau sur le bureau (SVG en image sans `isInteractive`, tic à 1 s hors terminal) : plus de flash blanc ni d'animation relancée, carte d'un exécutant visible pendant qu'il tourne _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — non testé au 2026-10-07 : commité (`c1c332a`) mais la version installée est encore la 0.7.1 ; réinstaller depuis le marketplace avant de tester
+- [x] `ROADMAP:TASK:34` Tester en session réelle le correctif 0.7.2 du bandeau sur le bureau (SVG en image sans `isInteractive`, tic à 1 s hors terminal) : plus de flash blanc ni d'animation relancée, carte d'un exécutant visible pendant qu'il tourne _(implements ROADMAP:SPEC:6; depends on ROADMAP:TASK:29)_ — fait 2026-10-08 : testé en session réelle avec `session-recap` 0.8.0 ; plus de flash, cartes visibles pendant que les agents tournent ; validé par eddy
+- [x] `ROADMAP:TASK:38` Mascottes déclarées en frontmatter (`mascot:`) ; scribe, chef, artiste, inspecteur, et une mascotte par gamme de modèle ; espacement entre les cartes ; validé visuellement par eddy le 2026-10-08 _(implements ROADMAP:SPEC:6)_ — canon : `CANON:42` à `CANON:47`
 
 ## Backlog (no milestone)
 
