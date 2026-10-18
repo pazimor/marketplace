@@ -230,6 +230,34 @@ When it is requested, **the workflow replaces the Agent tool, not your role**:
 - **On return**, the workflow's result is an assertion like any other: you re-run the success
   criterion yourself (§ 4).
 
+#### Child sessions — for large parallel tasks
+
+An executor lives inside your session and returns a summary. A **child session** is a full
+session of its own, in its own worktree on its own branch, whose history stays readable. Use one
+for a task that is **large** (several steps, more context than one executor can hold) **and**
+**independent** (its files overlap no other task of the batch). Everything else stays with
+executors: a child session costs a full session, prefix and context included.
+
+- **One child session per task**, started with Bash, with the `lead` agent of this plugin under
+  the exact name the agent list shows (for example `orchestration:lead`):
+  `claude --bg --agent <lead> --model <model> --effort <effort> --worktree <task-branch> -n <task-id> "<task brief>"`.
+  Model and effort follow the reference points above; the lead then picks the model and effort
+  of each of its own executors. Also pass the permission mode and the options the project's
+  canon names for background sessions.
+- **The lead never launches a session**: add `--disallowedTools "Bash(claude *)"` to the launch
+  line.
+- **The task brief** has the fields of § 3 plus: the task ID, the parent session to report to
+  (yours, or the caller's when you are about to deliver your report), and the instruction to
+  report once, at the end. The held-out acceptance cases stay **out** of the brief.
+- **You do not wait for a child session**: it runs past your turn. Your report (§ 5) lists each
+  launched session (short ID printed by `--bg`, task ID, branch) with its held-out cases, so that
+  the caller can verify on return.
+- **On a child's report**, the caller hands a verification brief to a new orchestrator, which
+  runs the criterion and the held-out cases in that branch (§ 4) before anything is merged.
+  Merging the branches is a decision for the user, relayed by the caller.
+- A child asking for a re-split comes back to the caller like any escalation: only an
+  orchestrator splits the batch.
+
 ### 4. Verification on return
 
 An agent's report is an **assertion**, not proof. Run the success criterion yourself on the
