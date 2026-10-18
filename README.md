@@ -78,7 +78,7 @@ Engine-agnostic: no engine named, no absolute distances — everything is measur
 - **Progress bar** — the plan declared by the orchestrator (`plan` / `step` tools): current phase, steps, agents, elapsed time; its color follows the state (running, waiting for you, error, done).
 - **Agent cards** — task, model · effort, current tool and clock, with a pixel-art mascot picked by the agent (`mascot:` in its frontmatter) or by its model tier.
 - **Workflows** — each phase with its `n/m agents`, and placeholder cards for the agents still to come.
-- **`/agents-info` pane** — 5-hour and 7-day limits with their forecast to the reset; the agent tree, where the main agent, the scribe and the orchestrator sit side by side, each card with its worked time and its usage bar; a per-prompt timeline (new, resumed, forked); the session's usage per model × effort. Each section folds.
+- **`/agents-info` pane** — 5-hour and 7-day limits with their forecast to the reset; the agent tree, where the main agent, the scribe and the orchestrator sit side by side, each card with its worked time and its usage bar; a per-prompt timeline (new, resumed, forked); the session's usage per model × effort. Each section folds. It opens on its own (in the desktop app, once the app connects) and keeps its figures when the app restarts or the session is resumed.
 - **Toasts** — limit thresholds (80 % / 95 %), token budgets per agent and per session, a sub-agent answering on another model, a main agent taking too large a share.
 - **`/progress`** hides or shows the bars, **`/progress-clear`** drops the current plan.
 

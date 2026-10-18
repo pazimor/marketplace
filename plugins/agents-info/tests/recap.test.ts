@@ -432,3 +432,70 @@ test('state change: the color fades from the old one to the new one', () => {
   const same = onPlanStep(s, { note: 'y', at: 1200 }) // same state: the fade in progress is not restarted
   expect(same.plan!.stateAt).toBe(1000)
 })
+
+import { SNAPSHOT_MAX_AGE_MS, SNAPSHOT_PREFIX, isBlank, isSnapshot, restoreRecap, staleSnapshots } from '../hooks/recap'
+
+test('restart: the saved recap comes back, its stretches of work cut at the save, its stale parts dropped', () => {
+  const H = 3600_000
+  let s = onSessionStart(emptyRecap(), { surface: 'desktop', agent: undefined, model: 'm', at: 0 })
+  expect(isBlank(s)).toBe(true)
+  s = onPrompt(s, { text: 'Build the cave level', at: 1000 })
+  s = onPlan(s, { title: 'cave', steps: ['blockout', 'review'], at: 1000 })
+  s = onSpawn(s, { agentId: 'a', agent: 'orchestration:executor-low', model: 'm', fork: false, at: 2000 })
+  s = onSpawn(s, { agentId: 'b', agent: 'orchestration:scribe', model: 'm', fork: false, at: 2000 })
+  s = onComplete(s, { agentId: 'b', reason: 'answer', at: 3000 })
+  s = onUsage(s, { agentId: 'a', effort: 'low', usage: usage('m', 10, 20, 0, 30) })
+  s = onMeasure(s, {
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 40, resetsAt: new Date(2 * H).toISOString() },
+      { kind: 'seven_day', percentUsed: 10, resetsAt: new Date(100 * H).toISOString() },
+    ],
+    costUsd: 1.5,
+    at: 4000,
+  })
+  s = markAlerted(s, [{ key: 'limit:seven_day:80:', text: 'x' }])
+  expect(isBlank(s)).toBe(false)
+  // what `$.store` gives back is JSON: a restart 3 h after the save
+  const saved = JSON.parse(JSON.stringify({ savedAt: 10_000, startedAt: 0, recap: s }))
+  expect(isSnapshot(saved)).toBe(true)
+  const back = restoreRecap(saved, 3 * H)
+  expect(back.prompts.map(p => p.text)).toEqual(['Build the cave level'])
+  expect(back.order).toEqual([MAIN, 'a', 'b'])
+  // the downtime is not worked time: the main agent goes on from the restart
+  expect(workedMs(back.runs[MAIN]!, 3 * H)).toBe(10_000)
+  expect(workedMs(back.runs[MAIN]!, 3 * H + 500)).toBe(10_500)
+  // the sub-agent that was running died with the process; the finished one is untouched
+  expect(back.runs.a!.status).toBe('done')
+  expect(back.runs.a!.endedAt).toBe(10_000)
+  expect(workedMs(back.runs.a!, 3 * H)).toBe(8000)
+  expect(back.runs.b).toEqual(s.runs.b)
+  // a live plan is dropped (its orchestrator is gone), an ended one is kept
+  expect(back.plan).toBeNull()
+  const ended = { ...saved, recap: { ...saved.recap, plan: { ...saved.recap.plan, endedAt: 5000 } } }
+  expect(restoreRecap(ended, 3 * H).plan?.title).toBe('cave')
+  // the 5 h window has reset since the save, the 7 day one has not
+  expect(Object.keys(back.limits)).toEqual(['seven_day'])
+  expect(back.costUsd).toBe(1.5)
+  expect(back.alerted).toEqual(['limit:seven_day:80:']) // no alert raised twice
+  expect(weight(totals(back))).toBe(60)
+  expect(back.restoredAt).toBe(3 * H) // the pane says it came back
+})
+
+test('snapshots: shape checked on read, pruned by age only', () => {
+  const snap = (savedAt: number) => ({ savedAt, recap: emptyRecap() })
+  expect(isSnapshot(undefined)).toBe(false)
+  expect(isSnapshot({ savedAt: 1 })).toBe(false)
+  expect(isSnapshot({ savedAt: 1, recap: { runs: {} } })).toBe(false)
+  expect(isSnapshot(snap(1))).toBe(true)
+  const now = SNAPSHOT_MAX_AGE_MS * 3
+  const stale = staleSnapshots(
+    [
+      { key: `${SNAPSHOT_PREFIX}old`, value: snap(now - SNAPSHOT_MAX_AGE_MS - 1) },
+      { key: `${SNAPSHOT_PREFIX}fresh`, value: snap(now - 1000) },
+      { key: `${SNAPSHOT_PREFIX}junk`, value: 'x' },
+      { key: 'other:1', value: 'x' }, // not a snapshot: left alone
+    ],
+    now,
+  )
+  expect(stale).toEqual([`${SNAPSHOT_PREFIX}old`, `${SNAPSHOT_PREFIX}junk`])
+})

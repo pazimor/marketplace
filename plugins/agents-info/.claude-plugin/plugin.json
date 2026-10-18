@@ -1,7 +1,7 @@
 {
   "name": "agents-info",
-  "version": "0.10.1",
-  "description": "Agents info Mod (Claude Code 2.1.287, Mods API in early access): starting agent, timeline of agents per prompt (new, resumed, forked), resolved model and effort of each, tokens per agent × model × effort, 5 h / 7 day limits with forecast, alerts. Read-only: alters and blocks nothing.",
+  "version": "0.11.0",
+  "description": "Agents info Mod (tested on Claude Code 2.1.295, Mods API in early access): starting agent, timeline of agents per prompt (new, resumed, forked), resolved model and effort of each, tokens per agent × model × effort, 5 h / 7 day limits with forecast, alerts. The pane opens on its own in the desktop app and keeps its figures when the app restarts. Read-only: alters and blocks nothing.",
   "author": {
     "name": "pazimor"
   },
