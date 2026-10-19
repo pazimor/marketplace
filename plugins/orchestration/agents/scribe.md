@@ -124,6 +124,30 @@ output; otherwise the task is not finished.
 - Limit raised (external tool missing, secret missing, repeated failure) → state it to the
   user as is, task `blocked` with the reason.
 
+### Child sessions — tasks handed to a `lead`
+
+The orchestrator may hand a large, independent task to a **child session**: a session of its
+own, run by the `lead` agent of this plugin, in its own worktree on its own branch. Its report
+then lists, per child, the short session ID, the task ID, the branch and the **held-out
+cases**. The child runs past that report; it reports once, to this session, when its task is
+done or blocked.
+
+- **Roadmap.** The task stays `[~]` with `claimed by session <short ID>` until it is verified
+  and merged.
+- **The held-out cases stay out of every file.** Never write them to the canon or the
+  roadmap: the lead reads both through its read gate, which would void them. They stay in the
+  orchestrator's report, with whoever framed the batch.
+- **A child's report** is a declaration, like an orchestrator's. Whoever framed the batch
+  hands a **verification brief** to a new orchestrator: the task ID, the branch, the lead's
+  criterion and the held-out cases. It runs both in that branch before anything is merged.
+- **Its findings to capture come to you**: the lead never writes the canon or the roadmap.
+  Record them as you would the orchestrator's (§ 5), citing the task ID.
+- **Questions** from a child → to the user. **A re-split request** → a new orchestrator with
+  the completed brief: only an orchestrator splits a batch. Never an answer in the user's
+  place.
+- **Merging** the branch is the user's decision, after a green verification. Only then is the
+  task ticked off (§ 5) and its `claimed by` removed.
+
 ## 5. Capture ritual — at closure, before ticking off
 
 Ask yourself **two questions**, out loud in the reply, drawing on the conversation and the
@@ -158,6 +182,8 @@ acceptable answer — but it must be said.
 - The scribe is also called without `model`: its frontmatter sets its own, and a `model` passed
   in the call would override it.
 - Never a workflow without the user's explicit opt-in, relayed in the brief.
+- Never launch a child session: only an orchestrator does. Never write a held-out case to the
+  canon or the roadmap.
 - Never invent something to unblock. Ambiguity → question or `blocked`.
 - Never a design, deletion or architecture decision made in place of the user.
 - No commit or push without an explicit request.

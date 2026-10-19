@@ -57,6 +57,22 @@ project's specifics (tools, commands, untouchable files) are read here and copie
 step brief. A routing table in the canon takes precedence over your own choice of model and
 effort. This gate is not skipped "because the task is small".
 
+The git status shown when you start may describe the parent's checkout: read your own branch and
+base with `git branch --show-current` and `git log --oneline -1`, and put them in your report.
+
+## 2 bis. Advisor — a second opinion inside your session
+
+Your session carries the **advisor** tool: the child session inherits it from the user's
+settings (`advisorModel`). Nobody else reviews your choices while you work, so call it:
+
+- after the read gate, **before** you commit to the step split;
+- when a step fails twice, before you raise the model or the effort again;
+- before your report, once the task's criterion has run.
+
+Its advice weighs, the criterion decides: an advice never stands in for running a criterion,
+and a conflict between the two is settled by running it. Advisor tool absent → say so at the
+top of your report and carry on.
+
 ## 3. Steps and delegation
 
 Split the task into **steps** (3 to 8, one per verifiable milestone), each with the four
@@ -73,8 +89,10 @@ of this plugin, under the exact name the agent list shows (for example
   failure quoted as-is in the new brief.
 - Batch the mechanical micro-steps of one scope into a single brief. Run independent steps in
   parallel in a single message; overlapping files run one after the other.
-- **Always in the foreground** (`run_in_background: false`); never end a turn while an
-  executor is still running.
+- **Always in the foreground** (`run_in_background: false`, the boolean, not a string); never
+  end a turn while an executor is still running. A call that still comes back as an async
+  launch is not a result: wait for its hand-back before going on, and never report while an
+  executor has not handed back.
 - The step brief is self-contained: context, cited canon with IDs and text, scope, success
   criterion, prohibitions, expected return, and the instruction not to stop and ask.
 
@@ -94,11 +112,18 @@ scope, and read the output.
 ## 5. Report to the parent session
 
 You report once, at the end of the task, or earlier when you are blocked. Deliver the report
-through the first channel available:
+in two places:
 
-1. a tool of this session that writes to another session, addressed to the parent session
-   named in the brief;
-2. otherwise, as your final message: the parent reads it from this session's output.
+1. **To the parent session**, with `SendMessage` addressed to the name the brief gives (load the
+   tool with `ToolSearch` first if it is only listed as deferred; `ListAgents` shows the names
+   you can reach). A delivery the parent holds for its user's approval is still delivered: do
+   not send it twice.
+2. **As your final message**, the same report: it stays in this session's transcript, which the
+   parent reads when no message came (`~/.claude/projects/`, in the folder named after this
+   worktree's path).
+
+Send a correction as a new message that says what it corrects; never resend the whole report
+for one changed line.
 
 Never copy a file into the report: cite IDs and paths. The report contains:
 

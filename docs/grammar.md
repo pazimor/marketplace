@@ -210,6 +210,7 @@ These apply only to the marketplace repo; they are ignored elsewhere.
 | `frontmatter.name` / `frontmatter.description` | ERROR | Fields present and non-empty |
 | `frontmatter.model` | ERROR | `model` ∈ {`opus`, `sonnet`, `haiku`, `fable`, `inherit`} or a `claude-*` ID |
 | `plugin.model-mention` | ERROR | Model name (`opus`, `sonnet`, `haiku`, `fable`, whole word, case ignored) in a `.md` or `.json` under `plugins/`, outside the `model:` line of an agent's frontmatter (`CANON:22`) |
+| `plugin.launch-separator` | ERROR | A `claude --bg` command (inline code or fenced block) in a `.md` under `plugins/` puts `--` after its last list option (`--disallowedTools`, `--allowedTools`, `--add-dir`, `--tools`, `--mcp-config`, `--betas`, `--file`): otherwise that option takes the prompt and the session starts idle (`CANON:68`) |
 | `frontmatter.effort` | ERROR | `effort` ∈ {`low`, `medium`, `high`, `xhigh`, `max`} (`CANON:6`) |
 | `frontmatter.mascot` | WARN | `mascot` of an agent ∈ {`scribe`, `chef`, `artist`, `inspector`, `courier`, `artisan`, `scholar`, `mage`, `bare`}: mascot of the `agents-info` band, which Claude Code ignores |
 | `frontmatter.plugin-agent-ignored` | WARN | `hooks`, `mcpServers`, `permissionMode` in a plugin agent: ignored by Claude Code (`CANON:6`) |

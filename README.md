@@ -23,7 +23,7 @@ Add the marketplace once, then install the plugins you want, one by one:
 
 | Plugin | What it does | Install |
 |---|---|---|
-| [`orchestration`](#orchestration) | Canon and roadmap as markdown files in your repo, and three agent roles that frame, delegate and verify. | `/plugin install orchestration@marketplace` |
+| [`orchestration`](#orchestration) | Canon and roadmap as markdown files in your repo, and agent roles that frame, delegate and verify — in one session, or across child sessions for large parallel tasks. | `/plugin install orchestration@marketplace` |
 | [`level-design`](#level-design) | Taste and method for building 3D levels, plus a reviewer that judges screenshots. | `/plugin install level-design@marketplace` |
 | [`agents-info`](#agents-info) | A live band above the prompt: plan progress, running agents, tokens and limits. | `/plugin install agents-info@marketplace` |
 
@@ -36,7 +36,7 @@ What you settle with the AI — what you expect, how things are tested, what mus
 ```mermaid
 flowchart TB
     you([you]) <--> main
-    subgraph peers ["three equal peers"]
+    subgraph peers ["parent session: three equal peers"]
         main["main agent<br/>frames the work with you"]
         scribe["scribe<br/>keeps canon + roadmap"]
         orch["orchestrator<br/>delegates and verifies"]
@@ -47,6 +47,14 @@ flowchart TB
     scribe --> files[(".claude/canon/*.md<br/>.claude/roadmap.md")]
     orch -- "scoped task<br/>model + effort" --> ex["executor-low … executor-max<br/>the only ones that write code"]
     ex -- report --> orch
+    orch -. "large independent task<br/>own session, worktree, branch" .-> lead
+    subgraph child ["child session, one per large task"]
+        lead["lead<br/>splits its task, delegates, verifies"]
+        cex["executor-low … executor-max"]
+        lead -- "step<br/>model + effort" --> cex
+        cex -- report --> lead
+    end
+    lead -. "report, once" .-> main
 ```
 
 - **Canon** — `.claude/canon/*.md`, one theme per file. Every entry carries its source: `[USER:<name>]` is untouchable, `[MODEL]` is inferred and gives way to the user. A stale entry is struck through with its date and reason.
@@ -54,6 +62,7 @@ flowchart TB
 - **scribe** — writes both, and runs a capture ritual at each task closure: what implicit thing was settled during this pass? It runs on the most economical model.
 - **orchestrator** — splits the framing brief into scoped tasks, picks the model and the reasoning effort of each one, and runs every success criterion itself, never trusting only the executor's own tests.
 - **executor-low … executor-max** — identical except for their reasoning effort.
+- **lead** — for a large task that overlaps no other, the orchestrator starts a child session (`claude --bg`) in its own worktree, run by the `lead`: it splits that one task into steps, delegates each to an executor, verifies, and reports once to the parent session. It launches no session, writes no code and never touches the canon or the roadmap. Before anything is merged, a new orchestrator re-runs the criterion on the child's branch, plus held-out cases the lead never saw; merging stays your call.
 - **Validator** — `python3 scripts/validate.py <project>` checks the canon and roadmap grammar of any project.
 
 ```markdown

@@ -13,3 +13,4 @@
 - `CANON:53` [USER:pazimor 2026-10-08] Clarifies `CANON:13`: in the terminal, the pane is drawn as text with mascot emoji and block bars, with no SVG.
 - `CANON:60` [USER:pazimor 2026-10-15] Clarifies `CANON:13`: the `agents-info` figures are reachable without typing a command, ideally in the desktop app's session sidebar as soon as a Mod can draw there (`CANON:59`).
 - `CANON:61` [USER:pazimor 2026-10-15] Planned cross-session stats of `agents-info`: the unit of comparison is a level built with the level designer (one session may build several; its name tells them apart, and the person draws the conclusions, the tool only surfaces the figures). Economy is measured by the share of the limits first (the orchestrator weighs on it), in dollars to speak to everyone, and in tokens.
+- `CANON:67` [USER:pazimor 2026-10-19] Planned: the `agents-info` Mod shows the child sessions of a batch. It is a separate phase (`CANON:56`), started once the child sessions have landed.
