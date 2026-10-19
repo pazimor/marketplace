@@ -241,7 +241,7 @@ executors: a child session costs a full session, prefix and context included.
 - **One child session per task**, started with Bash, with the `lead` agent of this plugin under
   the exact name the agent list shows (for example `orchestration:lead`), the task brief passed
   through a quoted heredoc:
-  `claude --bg --agent <lead> --model <model> --effort <effort> --permission-mode <mode> --worktree <task-id> -n <task-id> --settings '{"worktree":{"baseRef":"head"}}' --disallowedTools "Bash(claude *)" -- "<task brief>"`.
+  `claude --bg --agent <lead> --model <model> --effort <effort> --permission-mode <mode> --worktree <task-slug> -n <task-id> --settings '{"worktree":{"baseRef":"head"}}' --disallowedTools "Bash(claude *)" -- "<task brief>"`.
   - **Model and effort** follow the reference points above; the lead then picks the model and
     effort of each of its own executors.
   - **`--` before the brief**, always: `--disallowedTools` takes a list, and without `--` it
@@ -251,24 +251,27 @@ executors: a child session costs a full session, prefix and context included.
     before launching. Never leave the default, which stops the child at its first command. A
     mode the model does not support (auto mode is not offered on every model) falls back to the
     default without a word: pick the lead's model among those the mode supports.
-  - **Worktree**: `--worktree <task-id>` creates `.claude/worktrees/<task-id>` on the branch
-    `worktree-<task-id>`. Without `baseRef: head` it branches from `origin/<default branch>`,
-    without your branch's commits; with it, from your local `HEAD`. Uncommitted changes never
-    reach the child: a task that needs them is not ready to launch.
+  - **Worktree**: `--worktree <task-slug>` creates `.claude/worktrees/<task-slug>` on the branch
+    `worktree-<task-slug>`. The slug must make a valid branch name: `task-7` for
+    `ROADMAP:TASK:7`, since git refuses `:`; the full task ID goes in `-n` and in the brief.
+    Without `baseRef: head` the worktree branches from `origin/<default branch>`, without your
+    branch's commits; with it, from your local `HEAD`. Uncommitted changes never reach the
+    child: a task that needs them is not ready to launch. `.claude/worktrees/` not in the
+    project's `.gitignore` → say so in your report.
   - **Advisor**: the lead relies on its session's advisor, which the child inherits from the
-    user's `advisorModel` setting. If the settings set none, pass `--advisor <model>`, a model at
-    least as capable as the lead's.
+    user's `advisorModel` setting. If the settings set none, pass `--advisor <model>` (a hidden
+    flag of the CLI), a model at least as capable as the lead's.
   - **The lead never launches a session**: that is what `--disallowedTools "Bash(claude *)"` is
     for. Keep it.
 - **Check that it started.** `claude agents --json` lists the session by the short ID `--bg`
-  printed. `blocked` within its first minute means nobody will unblock it: read why with
+  printed. `blocked`, now or later, means nobody will unblock it: read why with
   `claude logs <id>` (a login the CLI is missing, a permission prompt), stop it with
   `claude stop <id>`, and report the reason instead of launching it again.
 - **The task brief** has the fields of § 3 plus: the task ID, the name of the parent session to
   report to (this session's own name, as `ListAgents` prints it), and the instruction to report
   once, at the end. The held-out acceptance cases stay **out** of the brief.
 - **You do not wait for a child session**: it runs past your turn. Your report (§ 5) lists each
-  launched session (short ID printed by `--bg`, task ID, branch `worktree-<task-id>`) with its
+  launched session (short ID printed by `--bg`, task ID, branch `worktree-<task-slug>`) with its
   held-out cases, so that the caller can verify on return.
 - **On a child's report**, the caller hands a verification brief to a new orchestrator, which
   runs the criterion and the held-out cases in that branch (§ 4) before anything is merged.

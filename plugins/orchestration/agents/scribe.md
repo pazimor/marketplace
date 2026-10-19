@@ -137,6 +137,10 @@ done or blocked.
 - **The held-out cases stay out of every file.** Never write them to the canon or the
   roadmap: the lead reads both through its read gate, which would void them. They stay in the
   orchestrator's report, with whoever framed the batch.
+- **A child that stays silent** is looked at, not waited on forever: `claude agents --json`
+  shows its state; `blocked` → `claude logs <short ID>` says why (a missing login, a
+  permission prompt). State it to the user as is; the task stays `[~]` with `blocked:` and the
+  reason.
 - **A child's report** is a declaration, like an orchestrator's. Whoever framed the batch
   hands a **verification brief** to a new orchestrator: the task ID, the branch, the lead's
   criterion and the held-out cases. It runs both in that branch before anything is merged.
