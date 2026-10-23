@@ -4,12 +4,12 @@
     "name": "pazimor"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a agents-info mod, for Claude Code",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "plugins": [
     {
       "name": "orchestration",
       "source": "./plugins/orchestration",
-      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrator` scopes, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code. No MCP server required"
+      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrator` scopes, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code; for a large independent task, a `lead` runs it in a child session you can open and answer directly. No MCP server required"
     },
     {
       "name": "level-design",
@@ -19,7 +19,7 @@
     {
       "name": "agents-info",
       "source": "./plugins/agents-info",
-      "description": "Agents info mod (function hooks, tested on Claude Code 2.1.287; the mods API is early access): a live band (plan progress bar, workflow phases, one card per running agent with a mascot dressed for its role or its model), a pane (/agents-info) with foldable sections: 5-hour / 7-day limit gauges with their forecast, the agent tree (main agent, scribe and orchestrator side by side) with each agent's resolved model, effort, worked time and usage bar, a per-prompt timeline of subagents (new, resumed, forked), and the session's usage per model × effort; toasts warn on limit thresholds, token budgets, an unexpected model or a main agent eating the session. Read-only: it never blocks or rewrites anything"
+      "description": "Agents info mod (function hooks, tested on Claude Code 2.1.295; the mods API is early access): a live band (plan progress bar, workflow phases, one card per running agent with a mascot dressed for its role or its model), a pane (/agents-info) with foldable sections: 5-hour / 7-day limit gauges with their forecast, the agent tree (main agent, scribe and orchestrator side by side) with each agent's resolved model, effort, worked time and usage bar, a per-prompt timeline of subagents (new, resumed, forked), and the session's usage per model × effort; toasts warn on limit thresholds, token budgets, an unexpected model or a main agent eating the session. Read-only: it never blocks or rewrites anything"
     }
   ]
 }

@@ -230,6 +230,80 @@ When it is requested, **the workflow replaces the Agent tool, not your role**:
 - **On return**, the workflow's result is an assertion like any other: you re-run the success
   criterion yourself (§ 4).
 
+#### Child sessions — large tasks the user follows on their own
+
+An executor lives inside your session and returns a summary. A **child session** is a full
+session of its own that the user can open: they follow its whole process there and answer its
+questions without going through the parent. Use one for a task whose goal is too **large** for
+one executor (several steps, more context than one executor can hold) **and** that is
+**independent** (its files overlap no other task of the batch). Everything else stays with
+executors: a child session costs a full session, prefix and context included.
+
+- **Contract.** The child applies the `lead` skill of this plugin. Its brief opens with: "Load
+  the skill `<lead skill>` and follow it", under the exact name the skill list shows (for
+  example `orchestration:lead`).
+- **Checkout**, chosen per task and written in the brief:
+  - **own worktree**, when the task should end on its own branch (its own review or merge), or
+    when its files could meet another task's;
+  - **shared checkout** (this session's folder), when its files overlap no other task's, and
+    whenever its verification needs a tool only this session drives. The child then touches
+    only its task's files, commits nothing and switches no branch; each task is committed
+    later by its paths. The project's canon may set the default.
+- **How to start it**, the first way that applies:
+  1. **The host's session tool**, when you have one (load it with `ToolSearch` if it is only
+     listed as deferred). In the desktop app the child shows under its parent and the user
+     opens it with a click. Pass a fresh context, the brief, the model, the effort, the
+     permission mode and the worktree choice.
+  2. **`claude --bg`**, from Bash, with the `lead` agent of this plugin under the exact name the
+     agent list shows (for example `orchestration:lead`), the brief passed through a quoted
+     heredoc; the user opens the child with `claude attach <short ID>`:
+     `claude --bg --agent <lead> --model <model> --effort <effort> --permission-mode <mode> --worktree <task-slug> -n <task-id> --settings '{"worktree":{"baseRef":"head"}}' --disallowedTools "Bash(claude *)" -- "<task brief>"`.
+     For a shared checkout, drop `--worktree` and `--settings`.
+     - **`--` before the brief**, always: `--disallowedTools` takes a list, and without `--` it
+       takes the brief too; the session then starts idle, with no prompt.
+     - **Worktree**: `--worktree <task-slug>` creates `.claude/worktrees/<task-slug>` on the
+       branch `worktree-<task-slug>`. The slug must make a valid branch name: `task-7` for
+       `ROADMAP:TASK:7`, since git refuses `:`; the full task ID goes in `-n` and in the brief.
+       Without `baseRef: head` the worktree branches from `origin/<default branch>`, without
+       your branch's commits; with it, from your local `HEAD`. Uncommitted changes never reach
+       a worktree: a task that needs them goes to the shared checkout or waits.
+       `.claude/worktrees/` not in the project's `.gitignore` → say so in your report.
+     - **Advisor**: the child inherits it from the user's `advisorModel` setting. If the
+       settings set none, pass `--advisor <model>` (a hidden flag of the CLI), a model at least
+       as capable as the lead's.
+     - **The lead never launches a session**: that is what `--disallowedTools "Bash(claude *)"`
+       is for. Keep it.
+  3. **Neither is available to you**, or the start is refused: put each child's ready brief
+     and launch parameters in your report; the caller starts them.
+- **Model and effort** follow the reference points above; the lead then picks the model and
+  effort of each of its own executors.
+- **Permission mode**: nobody approves a tool prompt in a child session. Pass the mode the
+  project's canon names for child sessions; none named → ask the caller, who asks the user,
+  before launching. Never leave the default, which stops the child at its first command. A mode
+  the model does not support (auto mode is not offered on every model) falls back to the
+  default without a word: pick the lead's model among those the mode supports.
+- **Check that it started.** The host's tool says so in its result; for `--bg`,
+  `claude agents --json` lists the session by the short ID it printed. A child stopped on a
+  login or a permission prompt will not get unblocked: read why (`claude logs <short ID>` for
+  `--bg`), stop it, and report the reason instead of launching it again. A child waiting on a
+  question to the user is expected: the user answers it there.
+- **The task brief** has the fields of § 3 plus: the task ID; the name of the parent session to
+  report to (the framing brief gives it, or `ListAgents` prints it); the checkout and, for a
+  shared checkout, the files the child may touch; which criteria the child runs and which ones
+  the parent runs (those that need a tool only the parent drives); and the instructions to ask
+  the user directly about its own task and to report once, at the end. The held-out acceptance
+  cases stay **out** of the brief.
+- **You do not wait for a child session**: it runs past your turn. Your report (§ 5) lists each
+  child (its name or short ID, task ID, checkout: branch `worktree-<task-slug>` or shared, with
+  its files), with its held-out cases and the criteria left to the parent, so that the caller
+  can verify on return.
+- **On a child's report**, the caller hands a verification brief to a new orchestrator. It runs
+  the criterion (the parent's part included) and the held-out cases, in the child's branch or
+  in the shared checkout on the task's files, before anything is merged or committed. Merging a
+  branch or committing a task's files is the user's decision, relayed by the caller.
+- A child asking for a re-split comes back to the caller like any escalation: only an
+  orchestrator splits the batch.
+
 ### 4. Verification on return
 
 An agent's report is an **assertion**, not proof. Run the success criterion yourself on the
@@ -272,7 +346,11 @@ goes into the canon and the roadmap.
 
 - The orchestrator does not write code and does not modify any file — neither the project's,
   nor the canon's, nor the roadmap's — directly or by driving an external tool. The only
-  exception: the script of a requested workflow.
+  exception: the script of a requested workflow. Launching a child session, which creates its
+  own worktree, is not modifying a file.
+- Never a child session for a task that overlaps another, or in the default permission mode;
+  never a `claude --bg` launch without `--` before its brief; never the held-out cases in a
+  child's brief.
 - Never delegate without a chosen effort and model; never run a workflow without an opt-in
   relayed by the framing brief.
 - Never the most capable model by default when an independent criterion lets you start from the

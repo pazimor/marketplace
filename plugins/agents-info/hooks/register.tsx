@@ -68,17 +68,26 @@ import {
   columnsPx,
   localClock,
   toggleFold,
+  SNAPSHOT_PREFIX,
+  isBlank,
+  isSnapshot,
+  restoreRecap,
+  staleSnapshots,
 } from './recap'
-import type { AgentRun, Limit, Mascot, Options, PaneSection, Tokens } from './recap'
+import type { AgentRun, Limit, Mascot, Options, PaneSection, Snapshot, Tokens } from './recap'
 
 const PANE = 'agents-info'
 type Dollar = Parameters<Hook<'session.measure'>>[0]
+/** While sub-agents finish inside one long turn of the main agent, the recap is saved at most this often. */
+const SAVE_EVERY_MS = 60_000
 
 const recap = atom({ plugin: 'agents-info', key: 'recap' } as const, emptyRecap())
 const hidden = atom({ plugin: 'agents-info', key: 'hidden' } as const, false)
 const tick = atom({ plugin: 'agents-info', key: 'tick' } as const, 0)
 // Pane sections folded by the person (limits, agents, prompts, usage): shared by every surface, all open by default.
 const folded = atom({ plugin: 'agents-info', key: 'folded' } as const, [] as string[])
+// The person closed the pane: it no longer opens on its own when a surface attaches (`/agents-info` opens it again).
+const paneClosed = atom({ plugin: 'agents-info', key: 'paneClosed' } as const, false)
 
 // Mascot declared by each agent type (`mascot:` in its frontmatter), read once per session.
 const mascots = new Map<string, Mascot | undefined>()
@@ -121,6 +130,69 @@ async function raise($: Dollar, o: Options) {
   for (const a of alerts) $.ui.toast(`agents-info: ${a.text}`)
 }
 
+/** The limits and the cost as the engine has them now, without waiting for its next measurement. */
+async function measureNow($: Dollar) {
+  const usage = await $.session.usage().catch(() => undefined)
+  if (usage === undefined) return
+  const at = await $.clock.now()
+  await update($, recap, s => onMeasure(s, { rateLimits: usage.rateLimits, costUsd: usage.cost?.usd, at }))
+}
+
+// `$.store` is best effort: one file shared by every session, capped at 4 MiB. A snapshot that cannot be read or
+// written only takes the pane back to what this process saw.
+let lastSave = 0
+/** Keeps the recap of the session in `$.store`, so that it comes back after the process restarts. */
+async function save($: Dollar, sessionId?: string) {
+  try {
+    const s = await read($, recap)
+    if (isBlank(s)) return
+    const id = sessionId ?? (await $.session.id())
+    const savedAt = await $.clock.now()
+    const startedAt = await $.session.usage().then(u => u.startedAt, () => undefined)
+    const snapshot: Snapshot = { savedAt, startedAt, recap: s }
+    await $.store.set(`${SNAPSHOT_PREFIX}${id}`, snapshot)
+    lastSave = savedAt
+  } catch (err) {
+    $.ui.log(`agents-info: recap not saved: ${String(err)}`, { to: 'debug' })
+  }
+}
+
+/** Brings back the recap this session saved before its process restarted, when the host's state came back empty. */
+async function restore($: Dollar, at: number) {
+  try {
+    if (!isBlank(await read($, recap))) return // a hot reload keeps `$.state`
+    const id = await $.session.id()
+    const saved = await $.store.get(`${SNAPSHOT_PREFIX}${id}`)
+    if (!isSnapshot(saved)) return
+    await update($, recap, () => restoreRecap(saved, at))
+    $.ui.log(`agents-info: recap restored from ${localClock(saved.savedAt, true)}`, { to: 'debug' })
+  } catch (err) {
+    $.ui.log(`agents-info: recap not restored: ${String(err)}`, { to: 'debug' })
+  }
+}
+
+/** Drops the snapshots of the sessions gone for too long. */
+async function prune($: Dollar, now: number) {
+  try {
+    const keys = (await $.store.keys()).filter(k => k.startsWith(SNAPSHOT_PREFIX))
+    const entries = await Promise.all(keys.map(async key => ({ key, value: await $.store.get(key) })))
+    for (const key of staleSnapshots(entries, now)) await $.store.delete(key)
+  } catch {
+    // nothing pruned this time
+  }
+}
+
+/** Opens the pane; one left waiting undrawn (narrow terminal, a surface that places no panes) says why. */
+async function openPane($: Dollar, focus = false): Promise<string | undefined> {
+  const opened = await $.ui.open({ id: PANE, title: 'Agents info', ...(focus ? { focus: true } : {}) }).catch((err: unknown) => {
+    $.ui.log(`agents-info: pane not opened: ${String(err)}`, { to: 'debug' })
+    return undefined
+  })
+  if (opened === undefined || opened.isPlaced) return undefined
+  $.ui.log(`agents-info: pane waits undrawn: ${opened.reason}`, { to: 'debug' })
+  return opened.reason
+}
+
 export const register: Register = (on, options) => {
   const o = readOptions(options)
   const autoOpen = options?.autoOpen !== false
@@ -132,11 +204,16 @@ export const register: Register = (on, options) => {
     await $.command
       .register({ name: 'agents-info', description: 'Agents info: agents, models, efforts, tokens, limits' })
       .catch(() => undefined)
-    const settings = await $.settings.read()
-    const agent = typeof settings.agent === 'string' ? settings.agent : undefined
-    const model = await $.session.model()
+    // neither read may cost the session its tools and its pane
+    const setting = await $.settings.read().then(x => x.agent, () => undefined)
+    const agent = typeof setting === 'string' ? setting : undefined
+    const model = await $.session.model().catch(() => '—')
     const at = await $.clock.now()
+    // a process that restarted (an update of the app, a resume) starts from an empty state: the saved recap comes back
+    await restore($, at)
     await update($, recap, s => onSessionStart(s, { surface: e.surface, agent, model, at }))
+    await measureNow($)
+    void prune($, at)
     // Step plan tools: the orchestrator calls them so the band shows progress.
     await $.command.register({ name: 'progress', description: 'Hide or show the progress bars' }).catch(() => undefined)
     await $.command.register({ name: 'progress-clear', description: 'Clear the current plan' }).catch(() => undefined)
@@ -193,7 +270,29 @@ export const register: Register = (on, options) => {
       if (isPlanLive(cur) || isFading(cur.plan, await $.clock.now()) || Object.values(cur.runs).some(r => r.id !== MAIN && r.status === 'running'))
         await update($, tick, n => n + 1)
     })
-    if (e.isInteractive && autoOpen) void $.ui.open({ id: PANE, title: 'Agents info' })
+    // under the REPL; the desktop app and the phones attach later (`session.attach`)
+    if (e.isInteractive && autoOpen && !(await read($, paneClosed))) void openPane($)
+    return next(e)
+  })
+
+  // A session the desktop app starts is not interactive and draws nowhere at `session.start`: the pane opens when a
+  // surface attaches, unless the person closed it or it is already open.
+  on('session.attach', async ($, e, next) => {
+    const r = await next(e)
+    if (autoOpen && !(await read($, paneClosed))) {
+      const isOpen = await $.ui.panes().then(ps => ps.some(p => p.id === PANE), () => false)
+      if (!isOpen) await openPane($)
+    }
+    return r
+  })
+
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE && e.origin.kind === 'person') await update($, paneClosed, () => true)
+    return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    await save($, e.sessionId)
     return next(e)
   })
 
@@ -251,8 +350,9 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'agents-info' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Agents info', focus: true })
-    return { text: 'Agents info pane opened.' }
+    await update($, paneClosed, () => false)
+    const waits = await openPane($, true)
+    return { text: waits === undefined ? 'Agents info pane opened.' : `Agents info pane waits: ${waits}` }
   })
 
   on('turn.start', async ($, e, next) => {
@@ -298,6 +398,12 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const at = await $.clock.now()
     await update($, recap, s => onComplete(s, { agentId: e.agentId, reason: e.reason, at }))
+    if (e.agentId === undefined) {
+      // end of a main turn: the limits even if no measurement reached the Mod, then the snapshot
+      await measureNow($)
+      await raise($, o)
+      await save($)
+    } else if (at - lastSave >= SAVE_EVERY_MS) await save($)
     return next(e)
   })
 
@@ -311,272 +417,282 @@ export const register: Register = (on, options) => {
   // The pane: limits, agents (the main agent and its peers at the top level), prompts, usage — each section folds.
   // Remote surfaces draw the gauges, mascots and bars as Svg; the terminal draws text, emoji and block bars.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const els = $.ui.resolve(e) as Record<string, any> // the element table depends on the surface
-    const { Box, Text, Button } = els
-    const isText = e.surface === 'terminal'
-    const s = await read($, recap)
-    const closed = await read($, folded)
-    await read($, tick) // the clocks of the running agents advance with the band's tick
-    const now = await $.clock.now()
-    const cols = e.props.bodyColumns
-    const all = totals(s)
-    const total = weight(all)
-    const main = s.runs[MAIN]
-    const subs = Object.values(s.runs).filter(r => r.id !== MAIN)
-    const active = subs.filter(r => r.status === 'running').length
-    const limits = Object.values(s.limits)
-    const share = (t: Tokens) => (total > 0 ? Math.round((100 * weight(t)) / total) : 0)
-    const cost = s.costUsd !== null ? ` · $${s.costUsd.toFixed(2)}` : ''
+    try {
+      const els = $.ui.resolve(e) as Record<string, any> // the element table depends on the surface
+      const { Box, Text, Button } = els
+      const isText = e.surface === 'terminal'
+      const s = await read($, recap)
+      const closed = await read($, folded)
+      await read($, tick) // the clocks of the running agents advance with the band's tick
+      const now = await $.clock.now()
+      const cols = e.props.bodyColumns
+      const all = totals(s)
+      const total = weight(all)
+      const main = s.runs[MAIN]
+      const subs = Object.values(s.runs).filter(r => r.id !== MAIN)
+      const active = subs.filter(r => r.status === 'running').length
+      const limits = Object.values(s.limits)
+      const share = (t: Tokens) => (total > 0 ? Math.round((100 * weight(t)) / total) : 0)
+      const cost = s.costUsd !== null ? ` · $${s.costUsd.toFixed(2)}` : ''
 
-    const section = (id: PaneSection, title: string, summary: string, body: () => unknown) => {
-      const open = !closed.includes(id)
-      return (
-        <Box key={`sec-${id}`} flexDirection="column" marginTop={1}>
-          <Box key={`sec-head-${id}`} flexDirection="row">
-            <Button key={`fold-${id}`} plain onPress={() => update($, folded, f => toggleFold(f, id))}>
-              {`${open ? '▾' : '▸'} ${title}`}
-            </Button>
-            <Text dimColor wrap="truncate-end"> · {summary}</Text>
+      const section = (id: PaneSection, title: string, summary: string, body: () => unknown) => {
+        const open = !closed.includes(id)
+        return (
+          <Box key={`sec-${id}`} flexDirection="column" marginTop={1}>
+            <Box key={`sec-head-${id}`} flexDirection="row">
+              <Button key={`fold-${id}`} plain onPress={() => update($, folded, f => toggleFold(f, id))}>
+                {`${open ? '▾' : '▸'} ${title}`}
+              </Button>
+              <Text dimColor wrap="truncate-end"> · {summary}</Text>
+            </Box>
+            {open && body()}
           </Box>
-          {open && body()}
+        )
+      }
+      // terminal bars: one colored run of cells per part
+      const usageText = (t: Tokens, width: number, max: number, key: string) => {
+        const c = usageCells(t, width, max)
+        return [
+          <Text key={`${key}-w`} color={USAGE_HEX.cacheWrite}>{'█'.repeat(c.cacheWrite)}</Text>,
+          <Text key={`${key}-o`} color={USAGE_HEX.output}>{'█'.repeat(c.output)}</Text>,
+          <Text key={`${key}-i`} color={USAGE_HEX.input}>{'█'.repeat(c.input)}</Text>,
+          <Text key={`${key}-f`} dimColor>{'░'.repeat(c.free)}</Text>,
+        ]
+      }
+
+      const header = (
+        <Box key="pane-head" flexDirection="row" justifyContent="space-between">
+          <Text bold>
+            {main === undefined ? 'Session not started' : 'Session'}
+            {s.restoredAt !== undefined && <Text dimColor bold={false}> · restored {localClock(s.restoredAt)}</Text>}
+          </Text>
+          <Text dimColor wrap="truncate-end">
+            {formatTokens(total)} tok{cost}{main !== undefined ? ` · ${duration(workedMs(main, now))}` : ''}
+          </Text>
         </Box>
       )
-    }
-    // terminal bars: one colored run of cells per part
-    const usageText = (t: Tokens, width: number, max: number, key: string) => {
-      const c = usageCells(t, width, max)
-      return [
-        <Text key={`${key}-w`} color={USAGE_HEX.cacheWrite}>{'█'.repeat(c.cacheWrite)}</Text>,
-        <Text key={`${key}-o`} color={USAGE_HEX.output}>{'█'.repeat(c.output)}</Text>,
-        <Text key={`${key}-i`} color={USAGE_HEX.input}>{'█'.repeat(c.input)}</Text>,
-        <Text key={`${key}-f`} dimColor>{'░'.repeat(c.free)}</Text>,
-      ]
-    }
 
-    const header = (
-      <Box key="pane-head" flexDirection="row" justifyContent="space-between">
-        <Text bold>{main === undefined ? 'Session not started' : 'Session'}</Text>
-        <Text dimColor wrap="truncate-end">
-          {formatTokens(total)} tok{cost}{main !== undefined ? ` · ${duration(workedMs(main, now))}` : ''}
-        </Text>
-      </Box>
-    )
-
-    // --- Limits: one gauge per window, forecast to the reset, alert thresholds of the options
-    const limitRow = (l: Limit) => {
-      const f = forecast(l)
-      const level = limitLevel(l.percentUsed, o)
-      const label = limitLabel(l.kind)
-      const reset = l.resetsAt === undefined ? NaN : Date.parse(l.resetsAt)
-      const isLong = l.kind !== 'five_hour'
-      const tail =
-        f.exhaustedAt !== null ? `full ≈ ${localClock(f.exhaustedAt, isLong)}` : f.atReset !== null ? `→ ${f.atReset}% at reset` : ''
-      const tailColor = f.exhaustedAt !== null ? LIMIT_HEX.critical : undefined
-      const resets = Number.isNaN(reset) ? '' : `resets ${localClock(reset, isLong)}`
-      if (isText) {
-        const c = limitCells(l, Math.max(10, Math.min(40, cols - 34)))
+      // --- Limits: one gauge per window, forecast to the reset, alert thresholds of the options
+      const limitRow = (l: Limit) => {
+        const f = forecast(l)
+        const level = limitLevel(l.percentUsed, o)
+        const label = limitLabel(l.kind)
+        const reset = l.resetsAt === undefined ? NaN : Date.parse(l.resetsAt)
+        const isLong = l.kind !== 'five_hour'
+        const tail =
+          f.exhaustedAt !== null ? `full ≈ ${localClock(f.exhaustedAt, isLong)}` : f.atReset !== null ? `→ ${f.atReset}% at reset` : ''
+        const tailColor = f.exhaustedAt !== null ? LIMIT_HEX.critical : undefined
+        const resets = Number.isNaN(reset) ? '' : `resets ${localClock(reset, isLong)}`
+        if (isText) {
+          const c = limitCells(l, Math.max(10, Math.min(40, cols - 34)))
+          return (
+            <Box key={`lim-${l.kind}`} flexDirection="row">
+              <Text wrap="truncate-end">
+                {label.padEnd(7)}
+                <Text color={LIMIT_HEX[level]}>{'█'.repeat(c.used)}</Text>
+                <Text color={LIMIT_HEX[limitLevel(f.atReset ?? 0, o)]}>{'▒'.repeat(c.projected)}</Text>
+                <Text dimColor>{'░'.repeat(c.free)}</Text>
+                <Text color={LIMIT_HEX[level]} bold> {String(l.percentUsed).padStart(3)}%</Text>
+                <Text color={tailColor} dimColor={tailColor === undefined}> {tail || resets}</Text>
+              </Text>
+            </Box>
+          )
+        }
+        const px = columnsPx(cols - 14)
         return (
-          <Box key={`lim-${l.kind}`} flexDirection="row">
-            <Text wrap="truncate-end">
-              {label.padEnd(7)}
-              <Text color={LIMIT_HEX[level]}>{'█'.repeat(c.used)}</Text>
-              <Text color={LIMIT_HEX[limitLevel(f.atReset ?? 0, o)]}>{'▒'.repeat(c.projected)}</Text>
-              <Text dimColor>{'░'.repeat(c.free)}</Text>
-              <Text color={LIMIT_HEX[level]} bold> {String(l.percentUsed).padStart(3)}%</Text>
-              <Text color={tailColor} dimColor={tailColor === undefined}> {tail || resets}</Text>
+          <Box key={`lim-${l.kind}`} flexDirection="column">
+            <Box key={`lim-row-${l.kind}`} flexDirection="row" alignItems="center">
+              <Text dimColor>{label.padEnd(7)}</Text>
+              <els.Svg
+                key={`lim-svg-${l.kind}`}
+                source={limitSvg(l, px, o)}
+                width={px}
+                height={LIMIT_HEIGHT}
+                alt={`${label} limit: ${l.percentUsed}% used${f.atReset !== null ? `, ${f.atReset}% forecast at the reset` : ''}`}
+              />
+              <Text color={LIMIT_HEX[level]} bold> {l.percentUsed}%</Text>
+            </Box>
+            <Text dimColor wrap="truncate-end">
+              {'       '}{resets}{resets !== '' && tail !== '' ? ' · ' : ''}<Text color={tailColor}>{tail}</Text>
             </Text>
           </Box>
         )
       }
-      const px = columnsPx(cols - 14)
-      return (
-        <Box key={`lim-${l.kind}`} flexDirection="column">
-          <Box key={`lim-row-${l.kind}`} flexDirection="row" alignItems="center">
-            <Text dimColor>{label.padEnd(7)}</Text>
-            <els.Svg
-              key={`lim-svg-${l.kind}`}
-              source={limitSvg(l, px, o)}
-              width={px}
-              height={LIMIT_HEIGHT}
-              alt={`${label} limit: ${l.percentUsed}% used${f.atReset !== null ? `, ${f.atReset}% forecast at the reset` : ''}`}
-            />
-            <Text color={LIMIT_HEX[level]} bold> {l.percentUsed}%</Text>
-          </Box>
-          <Text dimColor wrap="truncate-end">
-            {'       '}{resets}{resets !== '' && tail !== '' ? ' · ' : ''}<Text color={tailColor}>{tail}</Text>
-          </Text>
+
+      // --- Agents: a card each, usage bar scaled against the heaviest agent, numbers on hover
+      const maxAgent = Math.max(1, ...Object.values(s.runs).map(r => weight(r.tokens)))
+      const detail = (r: AgentRun) => (
+        <Box position="absolute" top={1} left={2} display="none" hover={{ display: 'flex' }}
+          flexDirection="column" borderStyle="round" paddingX={1}>
+          <Text key="d-1" wrap="truncate-end">input {formatTokens(r.tokens.input)} · output {formatTokens(r.tokens.output)}</Text>
+          <Text key="d-2" wrap="truncate-end">cache read {formatTokens(r.tokens.cacheRead)} · written {formatTokens(r.tokens.cacheWrite)}</Text>
         </Box>
       )
-    }
-
-    // --- Agents: a card each, usage bar scaled against the heaviest agent, numbers on hover
-    const maxAgent = Math.max(1, ...Object.values(s.runs).map(r => weight(r.tokens)))
-    const detail = (r: AgentRun) => (
-      <Box position="absolute" top={1} left={2} display="none" hover={{ display: 'flex' }}
-        flexDirection="column" borderStyle="round" paddingX={1}>
-        <Text key="d-1" wrap="truncate-end">input {formatTokens(r.tokens.input)} · output {formatTokens(r.tokens.output)}</Text>
-        <Text key="d-2" wrap="truncate-end">cache read {formatTokens(r.tokens.cacheRead)} · written {formatTokens(r.tokens.cacheWrite)}</Text>
-      </Box>
-    )
-    const agentCard = (r: AgentRun, depth: number) => {
-      const off = r.status !== 'running'
-      const mark = r.status === 'failed' ? ' ✗' : off ? ' ✓' : ''
-      const title = r.id === MAIN ? 'main agent' : (r.task ?? r.agent)
-      const meta = `${shortModel(r.model)} · ${r.effort}${r.tool !== undefined && !off ? ` (${r.tool})` : ''}`
-      const side = `${duration(workedMs(r, now))} · ${formatTokens(weight(r.tokens))}`
-      const mascot = mascotOf(r)
-      if (isText) {
-        const lead = depth === 0 ? '' : `${'  '.repeat(depth - 1)}└ `
-        return (
-          <Box key={`run-${r.id}`} flexDirection="column">
-            <Box key={`run-a-${r.id}`} flexDirection="row" justifyContent="space-between">
-              <Text color={r.status === 'failed' ? 'red' : undefined} dimColor={r.status === 'done'} wrap="truncate-end">
-                {lead}{MASCOT_EMOJI[mascot]} {title}{mark}
-              </Text>
-              <Box key={`run-as-${r.id}`} flexShrink={0}><Text dimColor> {side}</Text></Box>
-            </Box>
-            <Box key={`run-b-${r.id}`} flexDirection="row" justifyContent="space-between">
-              <Text dimColor wrap="truncate-end">{' '.repeat(lead.length + 3)}{meta} · {agentKind(r)}</Text>
-              <Box key={`run-bs-${r.id}`} flexShrink={0}>
-                <Text> {usageText(r.tokens, 10, maxAgent, `bar-${r.id}`)}<Text dimColor> {String(share(r.tokens)).padStart(2)}%</Text></Text>
+      const agentCard = (r: AgentRun, depth: number) => {
+        const off = r.status !== 'running'
+        const mark = r.status === 'failed' ? ' ✗' : off ? ' ✓' : ''
+        const title = r.id === MAIN ? 'main agent' : (r.task ?? r.agent)
+        const meta = `${shortModel(r.model)} · ${r.effort}${r.tool !== undefined && !off ? ` (${r.tool})` : ''}`
+        const side = `${duration(workedMs(r, now))} · ${formatTokens(weight(r.tokens))}`
+        const mascot = mascotOf(r)
+        if (isText) {
+          const lead = depth === 0 ? '' : `${'  '.repeat(depth - 1)}└ `
+          return (
+            <Box key={`run-${r.id}`} flexDirection="column">
+              <Box key={`run-a-${r.id}`} flexDirection="row" justifyContent="space-between">
+                <Text color={r.status === 'failed' ? 'red' : undefined} dimColor={r.status === 'done'} wrap="truncate-end">
+                  {lead}{MASCOT_EMOJI[mascot]} {title}{mark}
+                </Text>
+                <Box key={`run-as-${r.id}`} flexShrink={0}><Text dimColor> {side}</Text></Box>
               </Box>
+              <Box key={`run-b-${r.id}`} flexDirection="row" justifyContent="space-between">
+                <Text dimColor wrap="truncate-end">{' '.repeat(lead.length + 3)}{meta} · {agentKind(r)}</Text>
+                <Box key={`run-bs-${r.id}`} flexShrink={0}>
+                  <Text> {usageText(r.tokens, 10, maxAgent, `bar-${r.id}`)}<Text dimColor> {String(share(r.tokens)).padStart(2)}%</Text></Text>
+                </Box>
+              </Box>
+              {detail(r)}
+            </Box>
+          )
+        }
+        const barPx = columnsPx(cols - depth * 2 - 26)
+        const crabBody = r.status === 'failed' ? '#ef4444' : off ? '#8a7f7a' : '#d97757'
+        return (
+          <Box key={`run-${r.id}`} flexDirection="row" alignItems="center" marginLeft={depth * 2} borderStyle="round" paddingX={1}>
+            {depth > 0 && <Text dimColor>└ </Text>}
+            <els.Svg key={`crab-${r.id}`} source={crabSvg({ body: crabBody, animated: !off, mascot, mono: off })}
+              alt={`${mascot} mascot`} width={crabWidth()} height={CRAB_HEIGHT} />
+            <Box key={`run-txt-${r.id}`} flexDirection="column" paddingLeft={1} flexGrow={1} flexShrink={1}>
+              <Text color={r.status === 'failed' ? 'red' : undefined} dimColor={r.status === 'done'} wrap="truncate-end">{title}{mark}</Text>
+              <Text dimColor wrap="truncate-end">{meta}</Text>
+              <Text dimColor wrap="truncate-end">{agentKind(r)}</Text>
+              <els.Svg key={`use-${r.id}`} source={usageSvg(r.tokens, barPx, maxAgent, { height: 6 })} width={barPx} height={6}
+                alt={`usage: ${formatTokens(weight(r.tokens))} tokens, ${share(r.tokens)}% of the session`} />
+            </Box>
+            <Box key={`run-side-${r.id}`} flexDirection="column" alignItems="flex-end" flexShrink={0} paddingLeft={1}>
+              <Text dimColor>{duration(workedMs(r, now))}</Text>
+              <Text dimColor>{formatTokens(weight(r.tokens))} · {share(r.tokens)}%</Text>
             </Box>
             {detail(r)}
           </Box>
         )
       }
-      const barPx = columnsPx(cols - depth * 2 - 26)
-      const crabBody = r.status === 'failed' ? '#ef4444' : off ? '#8a7f7a' : '#d97757'
-      return (
-        <Box key={`run-${r.id}`} flexDirection="row" alignItems="center" marginLeft={depth * 2} borderStyle="round" paddingX={1}>
-          {depth > 0 && <Text dimColor>└ </Text>}
-          <els.Svg key={`crab-${r.id}`} source={crabSvg({ body: crabBody, animated: !off, mascot, mono: off })}
-            alt={`${mascot} mascot`} width={crabWidth()} height={CRAB_HEIGHT} />
-          <Box key={`run-txt-${r.id}`} flexDirection="column" paddingLeft={1} flexGrow={1} flexShrink={1}>
-            <Text color={r.status === 'failed' ? 'red' : undefined} dimColor={r.status === 'done'} wrap="truncate-end">{title}{mark}</Text>
-            <Text dimColor wrap="truncate-end">{meta}</Text>
-            <Text dimColor wrap="truncate-end">{agentKind(r)}</Text>
-            <els.Svg key={`use-${r.id}`} source={usageSvg(r.tokens, barPx, maxAgent, { height: 6 })} width={barPx} height={6}
-              alt={`usage: ${formatTokens(weight(r.tokens))} tokens, ${share(r.tokens)}% of the session`} />
-          </Box>
-          <Box key={`run-side-${r.id}`} flexDirection="column" alignItems="flex-end" flexShrink={0} paddingLeft={1}>
-            <Text dimColor>{duration(workedMs(r, now))}</Text>
-            <Text dimColor>{formatTokens(weight(r.tokens))} · {share(r.tokens)}%</Text>
-          </Box>
-          {detail(r)}
-        </Box>
-      )
-    }
 
-    // --- Prompts: the last ones, each with the agents it launched or resumed
-    const prompts = s.prompts.slice(-5)
-    const promptRow = (p: (typeof prompts)[number]) => {
-      const entries = s.timeline.filter(t => t.promptIndex === p.index)
-      const head = (
-        <Box key={`prompt-head-${p.index}`} flexDirection="row" justifyContent="space-between">
-          <Text wrap="truncate-end">#{p.index} {p.text}</Text>
-          <Box key={`prompt-at-${p.index}`} flexShrink={0}><Text dimColor> {localClock(p.at)}</Text></Box>
-        </Box>
-      )
-      if (isText || entries.length === 0) {
+      // --- Prompts: the last ones, each with the agents it launched or resumed
+      const prompts = s.prompts.slice(-5)
+      const promptRow = (p: (typeof prompts)[number]) => {
+        const entries = s.timeline.filter(t => t.promptIndex === p.index)
+        const head = (
+          <Box key={`prompt-head-${p.index}`} flexDirection="row" justifyContent="space-between">
+            <Text wrap="truncate-end">#{p.index} {p.text}</Text>
+            <Box key={`prompt-at-${p.index}`} flexShrink={0}><Text dimColor> {localClock(p.at)}</Text></Box>
+          </Box>
+        )
+        if (isText || entries.length === 0) {
+          return (
+            <Box key={`prompt-${p.index}`} flexDirection="column">
+              {head}
+              <Text dimColor wrap="wrap">
+                {'   '}{entries.length === 0 ? 'main agent only' : entries.map(t => `${INSTANCE_LABEL[t.kind]} ${agentName(s.runs[t.agentId]?.agent ?? t.agentId)}`).join(' · ')}
+              </Text>
+            </Box>
+          )
+        }
         return (
           <Box key={`prompt-${p.index}`} flexDirection="column">
             {head}
-            <Text dimColor wrap="wrap">
-              {'   '}{entries.length === 0 ? 'main agent only' : entries.map(t => `${INSTANCE_LABEL[t.kind]} ${agentName(s.runs[t.agentId]?.agent ?? t.agentId)}`).join(' · ')}
-            </Text>
+            <Box key={`chips-${p.index}`} flexDirection="row" flexWrap="wrap" gap={1} marginLeft={3}>
+              {entries.map((t, i) => {
+                const r = s.runs[t.agentId]
+                return (
+                  <Box key={`chip-${p.index}-${i}`} flexDirection="row" alignItems="center" borderStyle="round" paddingX={1}>
+                    {r !== undefined && (
+                      <els.Svg key={`chip-crab-${p.index}-${i}`} source={crabSvg({ height: 14, mascot: mascotOf(r), mono: r.status !== 'running' })}
+                        alt={`${mascotOf(r)} mascot`} width={crabWidth(14)} height={14} />
+                    )}
+                    <Text dimColor={t.kind !== 'new'}> {INSTANCE_LABEL[t.kind]} {agentName(r?.agent ?? t.agentId)}</Text>
+                  </Box>
+                )
+              })}
+            </Box>
           </Box>
         )
       }
-      return (
-        <Box key={`prompt-${p.index}`} flexDirection="column">
-          {head}
-          <Box key={`chips-${p.index}`} flexDirection="row" flexWrap="wrap" gap={1} marginLeft={3}>
-            {entries.map((t, i) => {
-              const r = s.runs[t.agentId]
-              return (
-                <Box key={`chip-${p.index}-${i}`} flexDirection="row" alignItems="center" borderStyle="round" paddingX={1}>
-                  {r !== undefined && (
-                    <els.Svg key={`chip-crab-${p.index}-${i}`} source={crabSvg({ height: 14, mascot: mascotOf(r), mono: r.status !== 'running' })}
-                      alt={`${mascotOf(r)} mascot`} width={crabWidth(14)} height={14} />
-                  )}
-                  <Text dimColor={t.kind !== 'new'}> {INSTANCE_LABEL[t.kind]} {agentName(r?.agent ?? t.agentId)}</Text>
-                </Box>
-              )
-            })}
-          </Box>
-        </Box>
-      )
-    }
 
-    // --- Usage: the session as a whole, then per model × effort
-    const models = modelBuckets(s)
-    const maxModel = Math.max(1, ...models.map(b => weight(b.tokens)))
-    const usage = () => {
-      if (total === 0) return <Text key="usage-none" dimColor>no usage yet</Text>
-      const legend = (
-        <Text key="usage-legend" wrap="truncate-end">
-          <Text color={USAGE_HEX.cacheWrite}>■</Text><Text dimColor> cache written {formatTokens(all.cacheWrite)}  </Text>
-          <Text color={USAGE_HEX.output}>■</Text><Text dimColor> output {formatTokens(all.output)}  </Text>
-          <Text color={USAGE_HEX.input}>■</Text><Text dimColor> input {formatTokens(all.input)} · cache read {formatTokens(all.cacheRead)} not counted</Text>
-        </Text>
-      )
-      const name = (b: (typeof models)[number]) => `${shortModel(b.model)} · ${b.effort}`
-      const nameCols = Math.min(24, Math.max(14, ...models.map(b => name(b).length + 1)))
-      if (isText) {
-        const w = Math.max(10, Math.min(48, cols - nameCols - 16))
+      // --- Usage: the session as a whole, then per model × effort
+      const models = modelBuckets(s)
+      const maxModel = Math.max(1, ...models.map(b => weight(b.tokens)))
+      const usage = () => {
+        if (total === 0) return <Text key="usage-none" dimColor>no usage yet</Text>
+        const legend = (
+          <Text key="usage-legend" wrap="truncate-end">
+            <Text color={USAGE_HEX.cacheWrite}>■</Text><Text dimColor> cache written {formatTokens(all.cacheWrite)}  </Text>
+            <Text color={USAGE_HEX.output}>■</Text><Text dimColor> output {formatTokens(all.output)}  </Text>
+            <Text color={USAGE_HEX.input}>■</Text><Text dimColor> input {formatTokens(all.input)} · cache read {formatTokens(all.cacheRead)} not counted</Text>
+          </Text>
+        )
+        const name = (b: (typeof models)[number]) => `${shortModel(b.model)} · ${b.effort}`
+        const nameCols = Math.min(24, Math.max(14, ...models.map(b => name(b).length + 1)))
+        if (isText) {
+          const w = Math.max(10, Math.min(48, cols - nameCols - 16))
+          return [
+            <Box key="usage-total" flexDirection="row">
+              <Text>{'total'.padEnd(nameCols)}{usageText(all, w, total, 'total')}<Text bold> {formatTokens(total).padStart(6)}</Text></Text>
+            </Box>,
+            legend,
+            ...models.map((b, i) => (
+              <Box key={`model-${i}`} flexDirection="row">
+                <Text wrap="truncate-end">
+                  {name(b).padEnd(nameCols)}{usageText(b.tokens, w, maxModel, `model-${i}`)}
+                  {' '}{formatTokens(weight(b.tokens)).padStart(6)}<Text dimColor> {String(share(b.tokens)).padStart(2)}%</Text>
+                </Text>
+              </Box>
+            )),
+          ]
+        }
+        const totalPx = columnsPx(cols - 14)
+        const modelPx = columnsPx(cols - nameCols - 18)
         return [
-          <Box key="usage-total" flexDirection="row">
-            <Text>{'total'.padEnd(nameCols)}{usageText(all, w, total, 'total')}<Text bold> {formatTokens(total).padStart(6)}</Text></Text>
+          <Box key="usage-total" flexDirection="row" alignItems="center">
+            <els.Svg key="usage-total-svg" source={usageSvg(all, totalPx, total, { height: 10 })} width={totalPx} height={10}
+              alt={`session usage: ${formatTokens(total)} tokens`} />
+            <Text bold> {formatTokens(total)} tok</Text>
           </Box>,
           legend,
           ...models.map((b, i) => (
-            <Box key={`model-${i}`} flexDirection="row">
-              <Text wrap="truncate-end">
-                {name(b).padEnd(nameCols)}{usageText(b.tokens, w, maxModel, `model-${i}`)}
-                {' '}{formatTokens(weight(b.tokens)).padStart(6)}<Text dimColor> {String(share(b.tokens)).padStart(2)}%</Text>
-              </Text>
+            <Box key={`model-${i}`} flexDirection="row" alignItems="center">
+              <els.Svg key={`model-crab-${i}`} source={crabSvg({ height: 18, mascot: mascotOf({ model: b.model }) })}
+                alt={`${mascotOf({ model: b.model })} mascot`} width={crabWidth(18)} height={18} />
+              <Box key={`model-name-${i}`} width={nameCols} paddingLeft={1}>
+                <Text wrap="truncate-end">{shortModel(b.model)}<Text dimColor> · {b.effort}</Text></Text>
+              </Box>
+              <els.Svg key={`model-svg-${i}`} source={usageSvg(b.tokens, modelPx, maxModel, { height: 8 })} width={modelPx} height={8}
+                alt={`${name(b)}: ${formatTokens(weight(b.tokens))} tokens`} />
+              <Text> {formatTokens(weight(b.tokens))}<Text dimColor> {share(b.tokens)}%</Text></Text>
             </Box>
           )),
         ]
       }
-      const totalPx = columnsPx(cols - 14)
-      const modelPx = columnsPx(cols - nameCols - 18)
-      return [
-        <Box key="usage-total" flexDirection="row" alignItems="center">
-          <els.Svg key="usage-total-svg" source={usageSvg(all, totalPx, total, { height: 10 })} width={totalPx} height={10}
-            alt={`session usage: ${formatTokens(total)} tokens`} />
-          <Text bold> {formatTokens(total)} tok</Text>
-        </Box>,
-        legend,
-        ...models.map((b, i) => (
-          <Box key={`model-${i}`} flexDirection="row" alignItems="center">
-            <els.Svg key={`model-crab-${i}`} source={crabSvg({ height: 18, mascot: mascotOf({ model: b.model }) })}
-              alt={`${mascotOf({ model: b.model })} mascot`} width={crabWidth(18)} height={18} />
-            <Box key={`model-name-${i}`} width={nameCols} paddingLeft={1}>
-              <Text wrap="truncate-end">{shortModel(b.model)}<Text dimColor> · {b.effort}</Text></Text>
-            </Box>
-            <els.Svg key={`model-svg-${i}`} source={usageSvg(b.tokens, modelPx, maxModel, { height: 8 })} width={modelPx} height={8}
-              alt={`${name(b)}: ${formatTokens(weight(b.tokens))} tokens`} />
-            <Text> {formatTokens(weight(b.tokens))}<Text dimColor> {share(b.tokens)}%</Text></Text>
-          </Box>
-        )),
-      ]
-    }
 
-    return (
-      <Box flexDirection="column">
-        {header}
-        {section('limits', 'Limits', limits.length === 0 ? 'no measure yet' : limits.map(l => `${limitLabel(l.kind)} ${l.percentUsed}%`).join(' · '), () =>
-          limits.length === 0 ? <Text key="limits-none" dimColor>no measure yet</Text> : limits.map(limitRow),
-        )}
-        {section('agents', 'Agents', `${active} active / ${subs.length}`, () => agentTree(s).map(x => agentCard(x.run, x.depth)))}
-        {section('prompts', 'Prompts', `${s.prompts.length} prompt(s)`, () =>
-          prompts.length === 0 ? <Text key="prompts-none" dimColor>no prompt</Text> : prompts.map(promptRow),
-        )}
-        {section('usage', 'Usage', `${formatTokens(total)} tok${cost}`, usage)}
-      </Box>
-    )
+      return (
+        <Box flexDirection="column">
+          {header}
+          {section('limits', 'Limits', limits.length === 0 ? 'no measure yet' : limits.map(l => `${limitLabel(l.kind)} ${l.percentUsed}%`).join(' · '), () =>
+            limits.length === 0 ? <Text key="limits-none" dimColor>no measure yet</Text> : limits.map(limitRow),
+          )}
+          {section('agents', 'Agents', `${active} active / ${subs.length}`, () => agentTree(s).map(x => agentCard(x.run, x.depth)))}
+          {section('prompts', 'Prompts', `${s.prompts.length} prompt(s)`, () =>
+            prompts.length === 0 ? <Text key="prompts-none" dimColor>no prompt</Text> : prompts.map(promptRow),
+          )}
+          {section('usage', 'Usage', `${formatTokens(total)} tok${cost}`, usage)}
+        </Box>
+      )
+    } catch (err) {
+      // a pane whose drawing throws is dropped by the engine without a word (`ui.close`, origin `unload`)
+      $.ui.log(`agents-info: pane not drawn: ${String(err)}`, { to: 'debug' })
+      const { Text } = $.ui.resolve(e) as Record<string, any>
+      return <Text key="pane-error" color="red" wrap="wrap">agents-info: the pane could not be drawn ({String(err)}).</Text>
+    }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

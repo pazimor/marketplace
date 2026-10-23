@@ -1,7 +1,7 @@
 {
   "name": "orchestration",
-  "version": "1.0.1",
-  "description": "Roadmap and canon as files for Claude Code — canon specs, milestones with DoD, tasks with stable IDs and claims (.claude/roadmap.md), canon with [USER]/[MODEL] provenance (.claude/canon/), the scribe agent (it keeps canon + roadmap, on the most economical model), the orchestrator agent (it delegates each task to the most economical model that an independent check can verify, escalates model or effort on failure, and reports back, without coding), three equal peers alongside the main agent, and its executors by effort level. No MCP server: portable via git.",
+  "version": "1.1.0",
+  "description": "Roadmap and canon as files for Claude Code — canon specs, milestones with DoD, tasks with stable IDs and claims (.claude/roadmap.md), canon with [USER]/[MODEL] provenance (.claude/canon/), the scribe agent (it keeps canon + roadmap, on the most economical model), the orchestrator agent (it delegates each task to the most economical model that an independent check can verify, escalates model or effort on failure, and reports back, without coding), three equal peers alongside the main agent, its executors by effort level, and the lead (a skill, plus an agent for `claude --bg`), which runs one large independent task in a child session you can open, follow and answer directly, and reports back to the parent session. No MCP server: portable via git.",
   "author": {
     "name": "pazimor"
   }

@@ -308,6 +308,25 @@ class TestFrontmatter(Base):
                 self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("effort: high", f"{key}:\n  - x"))
                 self.assertWarning("frontmatter.plugin-agent-ignored")
 
+    def test_launch_line_list_option_without_separator(self):
+        for body in ('`claude --bg --model <m> --disallowedTools "Bash(claude *)" "<task brief>"`',
+                     '`claude --background --add-dir=../x "<brief>"`',
+                     '```bash\nclaude --bg -n t1 --allowedTools Read Grep "<brief>"\n```'):
+            with self.subTest(body=body):
+                self.fx.replace(self.AGENT_PATH, "Body.", f"Body.\n\n{body}\n")
+                self.assertError("plugin.launch-separator")
+                self.fx.write(self.AGENT_PATH, dedent(AGENT))
+
+    def test_launch_line_separator_ok(self):
+        for body in ('`claude --bg --disallowedTools "Bash(claude *)" -- "<task brief>"`',
+                     '`claude --bg --model <m> "<task brief>"`',
+                     '`claude -p --disallowedTools Bash "<brief>"`',
+                     'add `--disallowedTools "Bash(claude *)"` to the line'):
+            with self.subTest(body=body):
+                self.fx.replace(self.AGENT_PATH, "Body.", f"Body.\n\n{body}\n")
+                self.assertEqual(self.run_validate().findings, [])
+                self.fx.write(self.AGENT_PATH, dedent(AGENT))
+
     def test_ignored_fields_ok_in_skill(self):
         self.fx.replace(self.SKILL_PATH, "description: Maintain the roadmap.", "description: x\nhooks: {}")
         self.assertEqual(self.run_validate().findings, [])

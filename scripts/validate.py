@@ -4,6 +4,7 @@
 Checks, under a project root:
   - the manifests `.claude-plugin/marketplace.json` and `plugins/*/.claude-plugin/plugin.json`;
   - the frontmatter of agents (`plugins/*/agents/*.md`) and skills (`plugins/*/skills/*/SKILL.md`);
+  - the `claude --bg` launch lines written in a plugin's markdown;
   - the canon grammar (`.claude/canon/*.md`);
   - the roadmap grammar (`.claude/roadmap.md`).
 
@@ -23,6 +24,7 @@ import argparse
 import datetime
 import json
 import re
+import shlex
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -344,6 +346,49 @@ def check_model_mentions(report: Report, root: Path) -> None:
             if m:
                 report.error("plugin.model-mention", path, n,
                              f"model name outside an agent's frontmatter: {m.group(0)!r} (`CANON:22`)")
+
+
+# Options of `claude` that take a list: they also take the prompt that follows them, and a
+# background session launched that way starts idle, with no prompt (`CANON:68`).
+VARIADIC_CLI_OPTIONS = {"--add-dir", "--allowedTools", "--allowed-tools", "--betas",
+                        "--disallowedTools", "--disallowed-tools", "--file", "--mcp-config", "--tools"}
+CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
+
+
+def _launch_missing_separator(command: str) -> str | None:
+    """The list option of a `claude --bg` command that no `--` follows, or None."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    if "claude" not in tokens or not {"--bg", "--background"} & set(tokens):
+        return None
+    last = None
+    for i, token in enumerate(tokens):
+        if token.split("=", 1)[0] in VARIADIC_CLI_OPTIONS:
+            last = i
+    if last is None or "--" in tokens[last + 1:]:
+        return None
+    return tokens[last].split("=", 1)[0]
+
+
+def check_launch_lines(report: Report, root: Path) -> None:
+    """A `claude --bg` command written in a plugin puts `--` between its list options and its prompt."""
+    for path in sorted(root.glob("plugins/**/*.md")):
+        text = read_text(report, path)
+        if text is None:
+            continue
+        in_fence = False
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            for command in [line] if in_fence else CODE_SPAN_RE.findall(line):
+                option = _launch_missing_separator(command)
+                if option:
+                    report.error("plugin.launch-separator", path, n,
+                                 f"`claude --bg` with `{option}` and no `--` before the prompt: "
+                                 f"the list option takes the prompt and the session starts idle")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -825,6 +870,7 @@ def validate(root: Path) -> Report:
     check_manifests(report, root)
     check_frontmatters(report, root)
     check_model_mentions(report, root)
+    check_launch_lines(report, root)
     canon = check_canon(report, root)
     check_roadmap(report, root, canon)
     return report
