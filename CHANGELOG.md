@@ -12,21 +12,38 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 ## [Unreleased]
 
 ### plugin `orchestration` 1.1.0 — marketplace 0.14.0 — Added
-- **Child sessions.** A large task that overlaps no other can go to a session of its own: the orchestrator launches it with `claude --bg`, in its own worktree on its own branch, run by the new **`lead`** agent (`CANON:62`). The parent session keeps its one main agent, scribe and orchestrator for the whole batch.
-- **New agent `lead`** — the main agent of a child session. It reads the canon, splits its one task into steps, delegates each to an `executor-*` with a chosen model and effort, verifies on return, and reports once to the parent session by `SendMessage`, with the same report as its final message in the transcript. It launches no session, writes no code and never touches the canon or the roadmap (`CANON:63`). It calls its session's advisor before its split, after a step fails twice and before its report (`CANON:66`).
-- **Orchestrator** — new "Child sessions" section, with the launch line and what the probe of 2026-10-19 showed it needs (`CANON:68`–`CANON:72`):
-  - `--` before the brief;
-  - a permission mode the canon names, `auto` in this repo (`CANON:65`);
-  - `--worktree task-<n>`, since a task ID with `:` is not a valid branch name (the full ID goes in `-n`);
-  - `worktree.baseRef: head`, so the child starts from your commits;
-  - `--disallowedTools "Bash(claude *)"`.
-  It checks that the child started, keeps the held-out cases out of the brief, and lists each launched session in its report.
-- **Return.** A child's report is verified by a new orchestrator on the child's branch, with its criterion plus the held-out cases, before anything is merged. Merging stays your call (`CANON:64`).
-- **Scribe** — § 4 says how child reports are handled. The task stays claimed by `session <short ID>`, the held-out cases never go into the canon or the roadmap, and a silent child is looked up with `claude agents --json`. The child's findings come to the scribe, and a re-split goes to a new orchestrator.
-- **Repo** — `.gitignore` now ignores `.claude/worktrees/`, where child worktrees live.
+- **Child sessions.** A task whose goal is too large for one session, and whose files overlap no other task's, can go to a session of its own. You open it, follow its whole process and answer its questions there, without going up the chain (`CANON:62`, `CANON:74`). The parent session keeps its one main agent, scribe and orchestrator for the whole batch.
+- **New skill `lead`** — the contract of a child session, applied from its brief (`CANON:76`).
+  - It reads the canon and splits its one task into steps. It delegates each step to an `executor-*` with a chosen model and effort, and verifies on return.
+  - It asks you directly about its own task. Only what touches the batch goes to the parent (`CANON:75`).
+  - It calls its session's advisor before its split, after a step fails twice and before its report (`CANON:66`).
+  - It reports once to the parent session by `SendMessage`, with the same report as its final message.
+  - It launches no session, writes no code and never touches the canon or the roadmap (`CANON:63`).
+- **New agent `lead`** — the entry point of a `claude --bg` child: it loads the `lead` skill.
+- **Orchestrator** — new "Child sessions" section.
+  - **How it starts a child:** with the host's session tool (a sub-session under the parent in the desktop app) or with `claude --bg`. If neither is available, it hands ready briefs to its caller.
+  - **Where the child works:** its own worktree, or the parent's folder when its files overlap no other task's (`CANON:77`). In the parent's folder, the child commits nothing and switches no branch.
+  - **Criteria only the parent can run** are listed as pending by the lead, and the verifying orchestrator runs them (`CANON:78`).
+  - **The `claude --bg` launch line,** measured on 2026-10-19 (`CANON:68`–`CANON:72`):
+    - `--` before the brief;
+    - a permission mode the canon names, `auto` in this repo (`CANON:65`);
+    - `--worktree task-<n>`, since a task ID with `:` is not a valid branch name;
+    - `worktree.baseRef: head`;
+    - `--disallowedTools "Bash(claude *)"`.
+- **Return.** A child's work is verified by a new orchestrator before anything is merged or committed: its criterion, the parent's part included, plus the held-out cases. Merging or committing stays your call (`CANON:64`).
+- **Scribe** — § 3: the framing brief names this session, so that children can report to it. § 4 covers how child reports are handled:
+  - the task stays claimed by `session <name>`, and the held-out cases never go into any file;
+  - a child waiting on you means the scribe tells you which session to open;
+  - decisions you took in a child are recorded as `[USER]`;
+  - a shared checkout is committed by its paths.
+- **Repo** — `.gitignore` now ignores `.claude/worktrees/`.
 - **Validator** — new `plugin.launch-separator` ERROR: a `claude --bg` command written in a plugin needs `--` after its last list option, or that option takes the prompt (`CANON:68`). Two new tests.
-- **Canon** — `CANON:62`–`CANON:73`. `CANON:43` (no agent depends on the advisor) is obsolete, replaced by `CANON:66`. Showing child sessions in `agents-info` is a separate, later phase (`CANON:67`).
-- Checked end to end on 2026-10-19: a CLI 2.1.287 child launched from a desktop 2.1.299 session, with the lead loaded from the branch (`CANON:73`). The `claude` on your PATH must be logged in, because a child uses that CLI and its own login, not the app's (`CANON:69`). To get it: `claude plugin update orchestration@marketplace`, then restart the app (`CANON:38`).
+- **Canon** — `CANON:62`–`CANON:80`. `CANON:43` (no agent depends on the advisor) is obsolete, replaced by `CANON:66`. Showing child sessions in `agents-info` is a separate, later phase (`CANON:67`).
+- **Checked:**
+  - end to end on 2026-10-19, with a CLI 2.1.287 child launched from a desktop session and the lead loaded from the branch (`CANON:73`);
+  - on 2026-10-23, that a subagent of a desktop session sees the app's session tool (`CANON:79`).
+
+  A `claude --bg` child uses the `claude` on your PATH and its own login, not the app's (`CANON:69`). To get it: `claude plugin update orchestration@marketplace`, then restart the app (`CANON:38`).
 
 ### plugin `agents-info` 0.11.0 — marketplace 0.14.0 — Fixed
 - The pane no longer loses its figures when the process restarts (an update of the app, a resumed session), which left it showing `no measure yet`. The recap is saved in the Mod's own store under `recap:<session id>`: at the end of each main turn, at most once a minute while sub-agents finish inside a long turn, and when the session ends. It is restored when the session starts again. Sub-agents that were running are marked done, a live plan is dropped, limit windows that reset since then are dropped, and the downtime does not count as worked time (`CANON:49`). The pane header says `restored HH:MM` when that happened. Snapshots older than 3 days are pruned.

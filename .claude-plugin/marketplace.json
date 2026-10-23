@@ -9,7 +9,7 @@
     {
       "name": "orchestration",
       "source": "./plugins/orchestration",
-      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrator` scopes, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code; for a large independent task, a `lead` runs it in a child session with its own worktree. No MCP server required"
+      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrator` scopes, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code; for a large independent task, a `lead` runs it in a child session you can open and answer directly. No MCP server required"
     },
     {
       "name": "level-design",

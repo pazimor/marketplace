@@ -109,6 +109,8 @@ contains:
 - **Workflow** — "explicitly requested by the user" or "not requested".
 - **Control** — "step by step" if the user wants to validate each step: then one call to the
   orchestrator per step, with validation between two calls.
+- **Session** — this session's name as `ListAgents` prints it, when the batch may go to child
+  sessions: they report to it.
 
 Independent tasks: a single brief is enough; the orchestrator parallelizes.
 
@@ -127,30 +129,36 @@ output; otherwise the task is not finished.
 ### Child sessions — tasks handed to a `lead`
 
 The orchestrator may hand a large, independent task to a **child session**: a session of its
-own, run by the `lead` agent of this plugin, in its own worktree on its own branch. Its report
-then lists, per child, the short session ID, the task ID, the branch and the **held-out
-cases**. The child runs past that report; it reports once, to this session, when its task is
-done or blocked.
+own that applies the `lead` skill of this plugin, in its own worktree or in this session's
+checkout. Its report then lists, per child, its name or short ID, the task ID, the checkout
+(branch, or shared with its files), the **held-out cases** and the criteria left to the parent.
+The child runs past that report. The user can open it, follow it and answer its questions
+there; it reports once to this session, when its task is done or blocked on the batch.
 
-- **Roadmap.** The task stays `[~]` with `claimed by session <short ID>` until it is verified
-  and merged.
+- **Roadmap.** The task stays `[~]` with `claimed by session <name or short ID>` until it is
+  verified and merged or committed.
 - **The held-out cases stay out of every file.** Never write them to the canon or the
   roadmap: the lead reads both through its read gate, which would void them. They stay in the
   orchestrator's report, with whoever framed the batch.
-- **A child that stays silent** is looked at, not waited on forever: `claude agents --json`
-  shows its state; `blocked` → `claude logs <short ID>` says why (a missing login, a
-  permission prompt). State it to the user as is; the task stays `[~]` with `blocked:` and the
-  reason.
+- **A child waiting on the user** sends this session one line saying so: tell the user which
+  session to open. Do not answer in their place.
+- **A child that stays silent** is looked at, not waited on forever: its session shows its
+  state (`claude agents --json`, then `claude logs <short ID>`, for a `claude --bg` child). A
+  missing login or a permission prompt → state it to the user as is; the task stays `[~]` with
+  `blocked:` and the reason.
 - **A child's report** is a declaration, like an orchestrator's. Whoever framed the batch
-  hands a **verification brief** to a new orchestrator: the task ID, the branch, the lead's
-  criterion and the held-out cases. It runs both in that branch before anything is merged.
-- **Its findings to capture come to you**: the lead never writes the canon or the roadmap.
-  Record them as you would the orchestrator's (§ 5), citing the task ID.
-- **Questions** from a child → to the user. **A re-split request** → a new orchestrator with
-  the completed brief: only an orchestrator splits a batch. Never an answer in the user's
-  place.
-- **Merging** the branch is the user's decision, after a green verification. Only then is the
-  task ticked off (§ 5) and its `claimed by` removed.
+  hands a **verification brief** to a new orchestrator: the task ID, the checkout and the
+  task's files, the lead's criterion with the part left to the parent, and the held-out cases.
+  It runs them all before anything is merged or committed.
+- **Decisions taken with the user** in the child, and its **findings to capture**, come to you:
+  the lead never writes the canon or the roadmap. Record the decisions as `[USER]` entries with
+  the date the report gives, the findings as `[MODEL]` (§ 5), citing the task ID.
+- **Questions for the batch** from a child → to the user. **A re-split request** → a new
+  orchestrator with the completed brief: only an orchestrator splits a batch. Never an answer
+  in the user's place.
+- **Merging** the branch, or **committing** the task's files of a shared checkout (by their
+  paths, never everything at once), is the user's decision, after a green verification. Only
+  then is the task ticked off (§ 5) and its `claimed by` removed.
 
 ## 5. Capture ritual — at closure, before ticking off
 

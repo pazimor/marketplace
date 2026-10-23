@@ -47,8 +47,8 @@ flowchart TB
     scribe --> files[(".claude/canon/*.md<br/>.claude/roadmap.md")]
     orch -- "scoped task<br/>model + effort" --> ex["executor-low … executor-max<br/>the only ones that write code"]
     ex -- report --> orch
-    orch -. "large independent task<br/>own session, worktree, branch" .-> lead
-    subgraph child ["child session, one per large task"]
+    orch -. "large independent task<br/>a session you can open" .-> lead
+    subgraph child ["child session, one per large task: you follow it and answer it there"]
         lead["lead<br/>splits its task, delegates, verifies"]
         cex["executor-low … executor-max"]
         lead -- "step<br/>model + effort" --> cex
@@ -62,7 +62,7 @@ flowchart TB
 - **scribe** — writes both, and runs a capture ritual at each task closure: what implicit thing was settled during this pass? It runs on the most economical model.
 - **orchestrator** — splits the framing brief into scoped tasks, picks the model and the reasoning effort of each one, and runs every success criterion itself, never trusting only the executor's own tests.
 - **executor-low … executor-max** — identical except for their reasoning effort.
-- **lead** — for a large task that overlaps no other, the orchestrator starts a child session (`claude --bg`) in its own worktree, run by the `lead`: it splits that one task into steps, delegates each to an executor, verifies, and reports once to the parent session. It launches no session, writes no code and never touches the canon or the roadmap. Before anything is merged, a new orchestrator re-runs the criterion on the child's branch, plus held-out cases the lead never saw; merging stays your call.
+- **lead** — for a large task that overlaps no other, the orchestrator starts a child session that applies the `lead` skill: a sub-session under the parent in the desktop app, or `claude --bg` elsewhere. You open it to follow its whole process and answer its questions there, without going up the chain. It splits its one task into steps, delegates each to an executor, verifies, and reports once to the parent session. It works in its own worktree, or in the parent's folder when its files overlap no other task's. It launches no session, writes no code and never touches the canon or the roadmap. Before anything is merged or committed, a new orchestrator re-runs the criterion, plus held-out cases the lead never saw; merging stays your call.
 - **Validator** — `python3 scripts/validate.py <project>` checks the canon and roadmap grammar of any project.
 
 ```markdown

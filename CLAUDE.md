@@ -11,7 +11,7 @@ A **Claude Code plugin marketplace** that distributes three serverless plugins: 
 - `.claude/roadmap.md`: specs, milestones with DoD, tasks with stable IDs, claims (skill `roadmap-tracker`)
 - `.claude/canon/*.md`: expectations, conventions, tests, invariants, each entry with its provenance `[USER:<name>]` / `[MODEL]` (skill `canon-tracker`)
 - the `scribe` and `orchestrator` agents and the main agent ("default") are three equal peers that talk to each other directly (`CANON:17`): the scribe keeps canon + roadmap; whoever framed the request with the user hands a framing brief to the `orchestrator` agent, which delegates each scoped task while choosing **the effort**, checks the results on return and reports back; the scribe captures what is implicit into the canon
-- a large, independent task goes to a **child session** run by the `lead` agent (`CANON:62`–`CANON:64`): the orchestrator launches it (`claude --bg`, own worktree and branch), the lead delegates its steps to executors and reports once to the parent session, and a new orchestrator verifies the branch before any merge
+- a large, independent task goes to a **child session** that applies the `lead` skill (`CANON:62`–`CANON:64`, `CANON:74`–`CANON:78`): the orchestrator starts it (desktop sub-session, or `claude --bg`), the user follows it and answers it there, the lead delegates its steps to executors and reports once to the parent session, and a new orchestrator verifies the work before any merge or commit
 
 This repo applies its own plugin to itself: **read `.claude/canon/*.md` before acting.**
 
@@ -23,9 +23,10 @@ plugins/orchestration/
 ├── .claude-plugin/plugin.json      # plugin semver version
 ├── agents/scribe.md                # scribe: peer, keeps canon + roadmap, does not write code, does not relay anything
 ├── agents/orchestrator.md          # orchestrator: peer, delegates, checks, reports back to its caller
-├── agents/lead.md                  # lead: main agent of a child session, one task, delegates, reports to the parent session
+├── agents/lead.md                  # lead: entry of a `claude --bg` child session, loads the `lead` skill
 ├── agents/executor-{low,medium,high,xhigh,max}.md   # executors: differ only by `effort`
-└── skills/{roadmap-tracker,canon-tracker}/SKILL.md   # owners of the grammars
+├── skills/{roadmap-tracker,canon-tracker}/SKILL.md   # owners of the grammars
+└── skills/lead/SKILL.md            # contract of a child session: one task, asks the user directly, reports to the parent
 plugins/level-design/
 ├── .claude-plugin/plugin.json      # plugin semver version
 ├── agents/level-design-reviewer.md # judges from screenshots (read-only)
