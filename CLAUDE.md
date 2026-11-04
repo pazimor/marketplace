@@ -8,8 +8,8 @@ A **Claude Code plugin marketplace** that distributes three serverless plugins: 
 (described below), `level-design` (taste and method for 3D level design, `CANON:9`) and
 `agents-info` (a agents-info Mod built on function hooks, `CANON:13`).
 `orchestration` only produces markdown files in the user's repo:
-- `.claude/roadmap.md`: specs, milestones with DoD, tasks with stable IDs, claims (skill `roadmap-tracker`)
-- `.claude/canon/*.md`: expectations, conventions, tests, invariants, each entry with its provenance `[USER:<name>]` / `[MODEL]` (skill `canon-tracker`)
+- `.claude/roadmap.md`: a single copy (no memory mirror) of what is open: specs, milestones with DoD, tasks with stable IDs, claims; closed work goes to the monthly archive `.claude/journal/roadmap-YYYY-MM.md` (skill `roadmap-tracker`, `CANON:84`)
+- `.claude/canon/*.md`: expectations, conventions, tests, invariants, each entry with its provenance `[USER:<name>]` / `[MODEL]`; on layout v2 the pages hold only the rules in force and `.claude/journal/canon-YYYY-MM.md` keeps the history (skill `canon-tracker`, `CANON:83`)
 - the `scribe` and `orchestrator` agents and the main agent ("default") are three equal peers that talk to each other directly (`CANON:17`): the scribe keeps canon + roadmap; whoever framed the request with the user hands a framing brief to the `orchestrator` agent, which delegates each scoped task while choosing **the effort**, checks the results on return and reports back; the scribe captures what is implicit into the canon
 - a large, independent task goes to a **child session** that applies the `lead` skill (`CANON:62`–`CANON:64`, `CANON:74`–`CANON:78`): the orchestrator starts it (desktop sub-session, or `claude --bg`), the user follows it and answers it there, the lead delegates its steps to executors and reports once to the parent session, and a new orchestrator verifies the work before any merge or commit
 
@@ -77,8 +77,11 @@ authentication is required.
   those details live in the user project's canon.
 - **Grammars belong to the SKILL.md files (`CANON:2`).** If a grammar rule changes,
   edit the SKILL.md, then `docs/grammar.md` and `scripts/validate.py` along with their tests.
-- **Canon: never delete anything.** An outdated entry is struck through `~~…~~` and followed by
-  `— obsolete YYYY-MM-DD: <reason>`. A `[USER]` entry is deprecated only on the user's decision.
+- **Canon: never delete anything.** Two layouts exist; a project is on v2 once `.claude/journal/` is a directory.
+  v1: an outdated entry is struck through `~~…~~` and followed by `— obsolete YYYY-MM-DD: <reason>`.
+  v2: the rule leaves its page, the journal keeps the history and nothing is deleted. In both, a `[USER]` rule
+  changes only through a new `[USER]` entry (`CANON:83`). **This repo's own canon stays on layout v1** (`CANON:91`),
+  so strike here, do not move rules to a journal.
 - **Plugin agents**: `hooks`, `mcpServers` and `permissionMode` are ignored in their frontmatter. The effort is set by `effort` in the frontmatter, or by `opts.effort` in a
   workflow (`CANON:6`); the Agent tool accepts `effort` at call time only since 2.1.293 (`CANON:26`).
 - Everything is written in English — skills, agents, docs, canon, CHANGELOG, code comments and UI strings — with a directive tone in skills and agents (`CANON:40`).

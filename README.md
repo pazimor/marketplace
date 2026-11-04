@@ -44,7 +44,7 @@ flowchart TB
     main <--> scribe
     main <--> orch
     orch -- findings --> scribe
-    scribe --> files[(".claude/canon/*.md<br/>.claude/roadmap.md")]
+    scribe --> files[(".claude/canon/*.md + .claude/journal/<br/>.claude/roadmap.md")]
     orch -- "scoped task<br/>model + effort" --> ex["executor-low … executor-max<br/>the only ones that write code"]
     ex -- report --> orch
     orch -. "large independent task<br/>a session you can open" .-> lead
@@ -57,8 +57,10 @@ flowchart TB
     lead -. "report, once" .-> main
 ```
 
-- **Canon** — `.claude/canon/*.md`, one theme per file. Every entry carries its source: `[USER:<name>]` is untouchable, `[MODEL]` is inferred and gives way to the user. A stale entry is struck through with its date and reason.
-- **Roadmap** — specs, milestones with a Definition of Done, tasks with stable IDs, claims and dependencies. It lives in Claude Code's auto-memory and is mirrored to `.claude/roadmap.md`.
+- **Canon** — `.claude/canon/<theme>.md`, one page per theme, holding only the rules in force. Every rule carries its source: `[USER:<name>]` is untouchable, `[MODEL]` is inferred and gives way to the user. Each page ends with `Sources:` citing the entries of the append-only monthly journal `.claude/journal/canon-YYYY-MM.md`, where the dated history lives: a retired rule leaves its page, nothing is deleted. Inside a framing you validated, the agent decides and records each choice as a `Decision:` entry, listed in its report with no answer expected; what stays with you is listed by the project's canon.
+- **Roadmap** — specs, milestones with a Definition of Done, tasks with stable IDs, claims and dependencies. A single copy in the repo, `.claude/roadmap.md`, with no auto-memory mirror any more; it holds only what is open. Closed tasks, finished milestones and retired specs go to the monthly append-only archive `.claude/journal/roadmap-YYYY-MM.md`.
+- **Layout** — a project is on layout v2 once `.claude/journal/` exists; a v1 project keeps working unchanged until you migrate it with the canon-tracker and roadmap-tracker migration operations.
+- **Work size** — a small piece of work (one scope, one criterion, one commit) needs no framing: your request is the go-ahead, one executor does it, one commit, one journal line. Medium work goes to the orchestrator, large work to the orchestrator and leads.
 - **scribe** — writes both, and runs a capture ritual at each task closure: what implicit thing was settled during this pass? It runs on the most economical model.
 - **orchestrator** — splits the framing brief into scoped tasks, picks the model and the reasoning effort of each one, and runs every success criterion itself, never trusting only the executor's own tests.
 - **executor-low … executor-max** — identical except for their reasoning effort.

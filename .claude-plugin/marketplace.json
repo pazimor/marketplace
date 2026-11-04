@@ -4,12 +4,12 @@
     "name": "pazimor"
   },
   "description": "AI guidance marketplace — roadmap, canon and orchestration as plain markdown files in your repo, plus 3D level-design taste and method, and a agents-info mod, for Claude Code",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "plugins": [
     {
       "name": "orchestration",
       "source": "./plugins/orchestration",
-      "description": "Roadmap + canon as markdown files in the repo (.claude/roadmap.md, .claude/canon/), plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrator` scopes, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code; for a large independent task, a `lead` runs it in a child session you can open and answer directly. No MCP server required"
+      "description": "Canon + roadmap as markdown files in the repo: the canon as pages of the rules in force (.claude/canon/) with an append-only monthly journal of its history (.claude/journal/), the roadmap as a single open-only copy (.claude/roadmap.md) with a monthly archive; plus three agent roles that are equal peers beside your main agent: the `scribe` keeps canon + roadmap on the most economical model; the `orchestrator` scopes, decides inside a framing you validated, delegates each task to the most economical model an independent check can verify, escalates model or effort on failure, verifies on return and reports back; executors code; for a large independent task, a `lead` runs it in a child session you can open and answer directly. No MCP server required"
     },
     {
       "name": "level-design",

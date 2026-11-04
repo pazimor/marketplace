@@ -21,6 +21,12 @@ code `0` with no error, `1` with at least one error (or a warning under `--stric
 does not exist. Each missing part (manifests, canon, roadmap) is simply skipped, which makes the
 script usable on any project that uses the plugin.
 
+**Two layouts.** The validator checks the **v1 layout** (sections 1 and 2: canon entries with dated
+provenance in `.claude/canon/`, a single `.claude/roadmap.md`) unless the project has a
+`.claude/journal/` folder, in which case it checks the **v2 layout** (section 5). The layout switch is
+described in § 5.1; the v1 part below is unchanged by it. Manifests and frontmatter (section 3) apply
+in both layouts.
+
 The **Level** columns below distinguish what violates a rule written in a SKILL.md (`ERROR`) from
 what is only suspect or falls under an unsettled reading (`WARN`).
 
@@ -41,7 +47,7 @@ blank-line = { SP } , NL ;
 
 ---
 
-## 1. Canon — `.claude/canon/*.md`
+## 1. Canon — `.claude/canon/*.md` (v1 layout)
 
 Source: canon-tracker, § "Where the canon lives" and § "Entry grammar".
 
@@ -115,7 +121,7 @@ legitimacy of a `[USER]` provenance, choosing the right thematic file, whether a
 
 ---
 
-## 2. Roadmap — `.claude/roadmap.md`
+## 2. Roadmap — `.claude/roadmap.md` (v1 layout)
 
 Source: roadmap-tracker, § "File grammar". The validator reads the **versioned mirror**
 `.claude/roadmap.md` (the source in auto-memory, `~/.claude/projects/<project>/memory/roadmap.md`, is
@@ -243,3 +249,152 @@ blocks, comments): enough for these files, with no dependency on PyYAML.
   (internal spaces included).
 - **A8 — Dash of the obsolescence mark.** The SKILL writes `—` (em dash); only this character is
   recognized. A `-` or `--` produces `canon.obsolete-missing`.
+
+---
+
+## 5. v2 layout — `.claude/journal/` present
+
+Everything in this section applies **only** when the layout switch of § 5.1 selects v2. Sources: by
+topic, since the SKILL.md sections are named by their authors: canon-tracker (page grammar, journal,
+`Sources`), roadmap-tracker (open roadmap, archive, `history:` element).
+
+### 5.1 Layout switch
+
+```text
+v2  iff  <root>/.claude/journal/  is a directory
+v1  otherwise (the output is the one of the v1 validator, finding for finding, in the same order)
+```
+
+In v2, only the files named `canon-YYYY-MM.md` and `roadmap-YYYY-MM.md` **directly** in
+`.claude/journal/` are read (`\d{4}-\d{2}` for the month). **Every other file there is ignored
+completely**, whatever it contains: a project may keep archived notes in that folder, full of
+`CANON:n` or `ROADMAP:TASK:n` strings inside fenced blocks. Nothing depends on the language of the
+section titles: projects write them in any language.
+
+```ebnf
+journal-canon-name   = "canon-" , year , "-" , month , ".md" ;
+journal-roadmap-name = "roadmap-" , year , "-" , month , ".md" ;
+year  = digit , digit , digit , digit ;
+month = digit , digit ;
+```
+
+### 5.2 Canon page — `.claude/canon/*.md`
+
+A page holds **live rules only**, one per line, each citing the journal entries it comes from.
+Nothing is struck through on a page, nothing is dated: history lives in the journal.
+
+```ebnf
+page          = { blank-line } , title-line , { blank-line | group-heading | page-rule } ;
+title-line    = "# " , text , NL ;                    (* first non-blank line *)
+group-heading = ( "## " | "### " ) , text , NL ;      (* any text *)
+page-rule     = "- " , rule-id , SP , page-prov , SP , rule-text , SP , sources , NL ;
+rule-id       = "`CANON:" , number , "`" ;
+page-prov     = "[USER:" , name , "]" | "[MODEL]" ;    (* NO date; name as in v1 (A7) *)
+rule-text     = ? non-empty text, on ONE line ? ;
+sources       = ( "Sources:" | "Sources :" ) , SP , source-ref , { ", " , source-ref } , [ "." ] , { SP } ;
+source-ref    = "`CANON:" , number , "`" ;
+```
+
+A rule is **one top-level bullet on one line**: an indented line under a rule is an error. A name that
+ends with a date (`[USER:x 2026-11-04]`) or a dated `[MODEL 2026-11-04]` is not a page provenance.
+`~~` and the marks `— obsolete` / `— obsolète` are forbidden anywhere on a page line.
+
+### 5.3 Canon journal — `.claude/journal/canon-YYYY-MM.md`
+
+The journal is tolerant: it may hold legacy content copied verbatim from a v1 canon. It is checked at
+the `WARN` level only, except for its IDs.
+
+```ebnf
+journal-canon = { blank-line } , [ title-line ] , { blank-line | heading-line | fence | journal-entry
+                | continuation | stray } ;
+journal-entry = [ "- " ] , [ "~~" ] , "`CANON:" , number , "`" , text , NL ;   (* non-indented line *)
+continuation  = INDENT , text , NL ;                  (* belongs to the entry just above *)
+fence         = "```" , ? up to the closing fence (same or longer run of backticks) ? ;
+```
+
+- A **non-indented** line that starts an entry (`^(- )?(~~)?` + `` `CANON:n` ``) opens an entry; the
+  indented lines that follow continue it; a blank line closes it. Headings (`#…`) and blank lines are
+  fine. **Lines inside a fenced block are never entries** and are skipped altogether.
+- Each entry block (head line + continuations joined by a space) is run through the **v1 entry
+  grammar** (§ 1.3), but every violation is reported as `WARN journal.entry`, the v1 code being quoted
+  in the message. Tolerated legacy shapes: struck entries with `— obsolète`, struck entries with no
+  obsolete mark, an entry without its `- `, `- ~~`CANON:9` …~~` with an indented `— obsolete …` line.
+
+### 5.4 Open roadmap — `.claude/roadmap.md`
+
+All the checks of § 2 apply (same file grammar), plus the v2 additions below. A task closed in v2 is
+**moved to the archive**, so the open roadmap holds only `[ ]` and `[~]` tasks.
+
+```ebnf
+suffix-v2  = "_(" , part-v2 , { "; " , part-v2 } , ")_" ;
+part-v2    = part | history ;                          (* part: § 2.2 *)
+history    = "history: " , archive-name ;               (* LAST element of the suffix *)
+archive-name = journal-roadmap-name ;                   (* the file must exist in .claude/journal/ *)
+```
+
+Order of the suffix elements: `implements`, `depends on`, `claimed by`, `blocked:`, `history:`. As
+`blocked:` runs to the end of the suffix, a trailing `; history: <file>` is split off from it. In the
+**v1 layout**, `history:` is not a known element: it produces the usual `roadmap.suffix` error.
+
+`depends on`, `implements` and milestone references resolve against the roadmap **and** the archive: a
+dependency on a task closed in the archive is known and counts as done (no unknown-reference error, no
+"dependency not done" warning); spec and milestone IDs that appear in the archive are known. `CANON:n`
+references in the roadmap resolve against the pages and the journal.
+
+### 5.5 Roadmap archive — `.claude/journal/roadmap-YYYY-MM.md`
+
+The archive is **verbatim legacy content**; its section titles are free (any language). Only the
+**top-level** lines below are classified, **by checkbox alone**, outside fenced blocks:
+
+```ebnf
+archive-task = "- [" , box , "] `ROADMAP:TASK:" , number , "`" , text , NL ;   (* at column 0 *)
+(* box "x"        : the task is closed here
+   box " " or "~" : history line of a task that is still open in the roadmap
+   any other box  : ignored *)
+```
+
+Everything else is tolerated silently (headings, prose, milestone blocks, spec lines, indented lines),
+but every `ROADMAP:SPEC:n` / `ROADMAP:MILESTONE:n` found outside a fence makes that ID known.
+
+### 5.6 Checked rules (v2)
+
+| Code | Level | Rule | Source |
+|---|---|---|---|
+| `canon.title` | ERROR | A page starts with `# <title>` | canon-tracker, page grammar |
+| `canon.prose` | ERROR | On a page, only blank lines, `#`/`##`/`###` headings and rules | canon-tracker, page grammar |
+| `canon.page-rule` | ERROR | A rule is one bullet on one line, `` `CANON:n` ``, `[USER:<name>]` or `[MODEL]` without date, non-empty text; no indented continuation | canon-tracker, page grammar |
+| `canon.page-sources` | ERROR | A rule ends with `Sources:` / `Sources :` and one or more `` `CANON:n` `` separated by `, `, optional final `.` | canon-tracker, page grammar |
+| `canon.page-strike` | ERROR | No `~~` and no `— obsolete` / `— obsolète` on a page line | canon-tracker, page grammar |
+| `canon.misc` | ERROR | No `misc.md` | canon-tracker, where the canon lives |
+| `canon.duplicate-id` | ERROR | `CANON:n` unique across pages **and** journal (page↔journal, page↔page, journal↔journal, across months) | canon-tracker, IDs |
+| `canon.unknown-source` | ERROR | Every ID cited in `Sources` is an entry of the journal (not a page rule, not absent) | canon-tracker, `Sources` |
+| `canon.page-size` | WARN | Page over 40960 bytes (a project's canon may set another budget) | canon-tracker, page budget |
+| `canon.unknown-ref` | WARN | A `CANON:n` cited in a rule text (before `Sources`) or in a journal entry exists in pages + journal | — (consistency) |
+| `journal.title` | WARN | A journal file starts with `# <title>` | canon-tracker, journal |
+| `journal.prose` | WARN | Journal lines outside entries, headings, blank lines and fenced blocks | canon-tracker, journal |
+| `journal.entry` | WARN | An entry block breaks the v1 entry grammar (v1 code in the message) | canon-tracker, journal |
+| `roadmap.done-task` | ERROR | No `[x]` task in the open roadmap: closed tasks live in the archive | roadmap-tracker, archive |
+| `roadmap.history` | ERROR | `history: <file>`: name `roadmap-YYYY-MM.md`, file present in `.claude/journal/` | roadmap-tracker, archive |
+| `roadmap.closed-and-open` | ERROR | A task closed in the archive is not open in the roadmap | roadmap-tracker, archive |
+| `roadmap.closed-twice` | ERROR | A task is closed once (same or different archive files; a `[x]` left in the roadmap counts) | roadmap-tracker, archive |
+| `roadmap.history-not-open` | ERROR | A history line (`[ ]`, `[~]` in the archive) targets a task open in the roadmap (not closed, not absent); history lines may repeat for the same ID | roadmap-tracker, archive |
+| `roadmap.done-milestone` | WARN | Milestone `done` in the open roadmap belongs in the archive | roadmap-tracker, archive |
+| `roadmap.retired-spec` | WARN | Spec `[retired]` in the open roadmap belongs in the archive | roadmap-tracker, archive |
+
+The v1 roadmap codes of § 2.3 keep their level in v2, with two changes of resolution: `roadmap.unknown-ref`
+and `roadmap.dependency-not-done` consult the archive (§ 5.4), and `roadmap.unknown-canon-ref` resolves
+against pages + journal. The v1 canon codes of § 1.4 are not raised in v2 on pages (replaced by the
+`canon.page-*` codes) and only surface in the journal as `journal.entry`; `canon.title`, `canon.prose`,
+`canon.misc`, `canon.duplicate-id` and `canon.unknown-ref` keep their names with the v2 meaning above.
+
+### 5.7 Out of the validator's reach
+
+- That a page rule is a faithful summary of the journal entries it cites, and that the cited entries
+  are the right ones; that a rule was not silently dropped from a page.
+- That a journal entry's provenance is legitimate; that a retired entry was moved to the right month.
+- That the archive was filled completely, and that a history line is useful; the archive is read by
+  checkbox only, so a mistyped box (`[X]`) is ignored without a finding.
+- The size budget of the journal and of the archive (only pages are measured), and any budget another
+  project sets for its pages.
+- Every rule of § 1.4 and § 2.3 that was already out of reach in v1 (one sentence per entry, durable
+  entries, the right thematic file…).

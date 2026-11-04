@@ -11,6 +11,22 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 
 ## [Unreleased]
 
+### plugin `orchestration` 2.0.0 — marketplace 0.15.0 — Changed (breaking)
+- **Decision rule.** Inside a framing you validated, the agent decides, applies and records each choice as a `[MODEL <date>] Decision: …; why: …; rejected: …; to revert: …` entry. Its report lists these decisions, with no answer expected. Revisiting one is a new entry that replaces it, and a `[USER]` entry is never contradicted (`CANON:81`, `CANON:92`).
+  - What stays with you is listed by the project's canon. By default: your own channel, the product's intent, deleting your work, anything irreversible or that leaves the machine, and launching a work item.
+  - It replaces "the user decides / you escalate it" in the orchestrator, scribe and lead, and "the model flags, it does not decide" in the canon-tracker.
+- **Work size.** A small piece of work (one scope, no open question, one criterion, one commit) needs no framing: your request is the go-ahead, the main agent hands it to one executor, and it leaves one commit and one journal line, no task. It is never started on the agent's own initiative, only proposed. Medium work goes to the orchestrator, large work to the orchestrator and leads (`CANON:82`).
+- **Canon layout v2.** Pages `.claude/canon/<theme>.md` hold only the rules in force, with undated provenance, each ending with `Sources:` that cite journal IDs. No struck line, and a 40 KB budget per page by default. The history moves to `.claude/journal/canon-YYYY-MM.md`, append-only, with legacy content accepted word for word. IDs are unique across pages and journal. Nothing is ever deleted (`CANON:83`).
+- **Roadmap v2.** `.claude/roadmap.md` is a single copy in the repo, with no auto-memory mirror any more (an older memory copy: the newer wins once, then it is moved out, never deleted without you). It holds only what is open. Closed tasks, finished milestones, retired specs and the history lines of open tasks go to `.claude/journal/roadmap-YYYY-MM.md`. A task suffix gets a last element `history: <file>`, and closing a task means the DoD evidence, then moving its line to the archive (`CANON:84`, `CANON:90`).
+- **Layout switch.** A project is on v2 if and only if `.claude/journal/` is a directory. A v1 project is validated exactly as in 1.1.0 (`CANON:85`).
+- **New operations.** `canon-tracker` migrates a v1 canon to v2 and `roadmap-tracker` migrates a roadmap and its archive; both are in their skills.
+- **Validator** — 140 tests (64 new).
+  - New ERROR codes: `canon.page-rule`, `canon.page-sources`, `canon.page-strike`, `canon.unknown-source`, `roadmap.done-task`, `roadmap.history`, `roadmap.closed-and-open`, `roadmap.closed-twice`, `roadmap.history-not-open`.
+  - New WARN codes: `canon.page-size` (40 960 bytes, `CANON:87`), `journal.title`, `journal.prose`, `journal.entry`, `roadmap.done-milestone`, `roadmap.retired-spec`.
+  - Legacy violations in the journal are WARN only, duplicate IDs stay ERROR, and only `canon-YYYY-MM.md` and `roadmap-YYYY-MM.md` are read (`CANON:86`). The `history:` element is recognized only in v2 (`CANON:88`), and the archive is classified by checkbox only (`CANON:89`).
+- **Repo** — this repo's own canon stays on layout v1 (`CANON:91`). The catalog description of `orchestration` changed, hence marketplace 0.15.0 (`CANON:93`).
+- **Migrating.** A v1 project keeps working unchanged until `.claude/journal/` exists. To move to v2, run the migration operations of the canon-tracker and roadmap-tracker, then `python3 scripts/validate.py <project>`. To get the update: `claude plugin update orchestration@marketplace`, then restart the app (`CANON:38`).
+
 ### plugin `orchestration` 1.1.0 — marketplace 0.14.0 — Added
 - **Child sessions.** A task whose goal is too large for one session, and whose files overlap no other task's, can go to a session of its own. You open it, follow its whole process and answer its questions there, without going up the chain (`CANON:62`, `CANON:74`). The parent session keeps its one main agent, scribe and orchestrator for the whole batch.
 - **New skill `lead`** — the contract of a child session, applied from its brief (`CANON:76`).

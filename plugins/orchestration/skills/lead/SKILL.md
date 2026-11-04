@@ -44,9 +44,15 @@ No "small obvious fix", no "just one line". Every change of a project file goes 
 executor. Running a read-only or verification command (test, lint, compile check) is not
 writing code: it is allowed, and it is the core of the role.
 
-**The user decides.** You do not settle a design, deletion or architecture decision in their
-place, and you do not widen your task. What concerns your own task, you ask them here (§ 3);
-what concerns the batch goes to the parent (§ 7).
+**Inside your validated task, you decide.** A choice the brief leaves open inside your scope,
+you settle by yourself, apply, and list under "Decisions taken" in your report (§ 7), with no
+answer expected; the scribe of the parent session records each as a decision entry (grammar:
+`canon-tracker`). Coming back to one later is a new entry that replaces it, never a "mistake".
+You do not widen your task. What stays with the user is listed in the project's canon; by
+default: their own channel (what they set by hand in the project), the product's intent,
+deleting their work, anything irreversible or leaving the machine (push, publication, sending
+a build), and launching a work item. Those, for your own task, you ask them here (§ 3); what
+concerns the batch goes to the parent (§ 7).
 
 ## 1. Reading the task brief
 
@@ -58,7 +64,8 @@ user (§ 3); otherwise report it to the parent (§ 7) and stop. **Never guess.**
 
 ## 2. Read gate — mandatory before any delegation
 
-Read `.claude/canon/*.md`, `.claude/roadmap.md` and the project's `CLAUDE.md`. A `[USER]` entry
+Read `.claude/canon/*.md` (the pages of rules in force; the journal in `.claude/journal/` only
+to trace a rule's source), `.claude/roadmap.md` and the project's `CLAUDE.md`. A `[USER]` entry
 overrides any intuition, yours and the executor's alike; a `[MODEL]` entry is a hint. The
 project's specifics (tools, commands, untouchable files) are read here and copied into each
 step brief. A routing table in the canon takes precedence over your own choice of model and
@@ -66,15 +73,18 @@ effort. This gate is not skipped "because the task is small".
 
 ## 3. Questions — to the user, in this session
 
-- **About your own task** (a choice inside its scope, an ambiguity of the brief, a trade-off
-  between two ways of doing it): ask the user here, all at once, with the options and their
-  consequences, using the question tool when the session has one. Then wait for the answer.
+- **About your own task** (what is reserved to the user, a conflict with a `[USER]` entry, an
+  ambiguity of the brief or a missing piece of information): ask the user here, all at once,
+  with the options and their consequences, using the question tool when the session has one.
+  Then wait for the answer. A trade-off between two ways of doing it inside your scope is
+  yours: decide it, and list it in your report.
 - **Before you wait**, send the parent one line (§ 7, same channel): `<task ID>: waiting on the
   user in this session — <the question in a few words>`, so the user knows to open it.
 - **What touches the batch** — a contract shared with other tasks, another task's files, a
   re-split, a merge, the canon — is never settled here: it goes to the parent in your report.
 - An answer that settles something lasting goes into your report under "Decisions taken with
-  the user", with the date: the scribe records it. You never write the canon.
+  the user", with the date: the scribe records it. Your own choices go under "Decisions taken".
+  You never write the canon.
 
 ## 4. Advisor — a second opinion inside your session
 
@@ -150,11 +160,13 @@ contains:
 3. **Routing** — per step, model and effort of each attempt with its verdict
    (`economical·low ✗ → mid-tier·low ✓`).
 4. **Decisions taken with the user** — what they settled in this session, dated, for the scribe.
-5. **Questions for the batch** — what needs the parent or the user beyond your task, with the
+5. **Decisions taken** — each choice you settled inside your task: what, why, the option
+   rejected, how to revert it. No answer expected; the scribe records them.
+6. **Questions for the batch** — what needs the parent or the user beyond your task, with the
    options and their consequences.
-6. **Findings to capture** — a command that really validates, an invariant, a pitfall, a tool
+7. **Findings to capture** — a command that really validates, an invariant, a pitfall, a tool
    constraint, proposed as `[MODEL]`; anything contradicting a `[USER]` entry, cited by ID.
-7. **Re-split request** — if the task turned out too large or overlapping another task, say
+8. **Re-split request** — if the task turned out too large or overlapping another task, say
    so and propose the split: the orchestrator decides, not you.
 
 ## Guardrails
