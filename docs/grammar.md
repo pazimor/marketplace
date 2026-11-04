@@ -349,7 +349,7 @@ The archive is **verbatim legacy content**; its section titles are free (any lan
 ```ebnf
 archive-task = "- [" , box , "] `ROADMAP:TASK:" , number , "`" , text , NL ;   (* at column 0 *)
 (* box "x"        : the task is closed here
-   box " " or "~" : history line of a task that is still open in the roadmap
+   box " " or "~" : history line of a task, written while it was open; it stays once the task is closed
    any other box  : ignored *)
 ```
 
@@ -377,7 +377,7 @@ but every `ROADMAP:SPEC:n` / `ROADMAP:MILESTONE:n` found outside a fence makes t
 | `roadmap.history` | ERROR | `history: <file>`: name `roadmap-YYYY-MM.md`, file present in `.claude/journal/` | roadmap-tracker, archive |
 | `roadmap.closed-and-open` | ERROR | A task closed in the archive is not open in the roadmap | roadmap-tracker, archive |
 | `roadmap.closed-twice` | ERROR | A task is closed once (same or different archive files; a `[x]` left in the roadmap counts) | roadmap-tracker, archive |
-| `roadmap.history-not-open` | ERROR | A history line (`[ ]`, `[~]` in the archive) targets a task open in the roadmap (not closed, not absent); history lines may repeat for the same ID | roadmap-tracker, archive |
+| `roadmap.history-not-open` | ERROR | A history line (`[ ]`, `[~]` in the archive) targets a task open in the roadmap or closed in the archive (history lines are written while the task is open and stay after it is closed); it is an error only when the task is neither; history lines may repeat for the same ID | roadmap-tracker, archive |
 | `roadmap.done-milestone` | WARN | Milestone `done` in the open roadmap belongs in the archive | roadmap-tracker, archive |
 | `roadmap.retired-spec` | WARN | Spec `[retired]` in the open roadmap belongs in the archive | roadmap-tracker, archive |
 

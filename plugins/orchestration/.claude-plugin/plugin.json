@@ -1,6 +1,6 @@
 {
   "name": "orchestration",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Roadmap and canon as files for Claude Code — the canon as pages of the rules in force (.claude/canon/) with an append-only monthly journal of its history (.claude/journal/), each rule carrying its [USER]/[MODEL] provenance; the roadmap as a single copy (.claude/roadmap.md) holding only what is open, with a monthly archive of what is closed; the scribe agent (it keeps canon + roadmap, on the most economical model); the orchestrator agent (inside a framing you validated it decides, applies and records each choice, delegates each task to the most economical model that an independent check can verify, escalates model or effort on failure, and reports back, without coding), three equal peers alongside the main agent, its executors by effort level, and the lead (a skill, plus an agent for `claude --bg`), which runs one large independent task in a child session you can open, follow and answer directly. No MCP server: portable via git.",
   "author": {
     "name": "pazimor"

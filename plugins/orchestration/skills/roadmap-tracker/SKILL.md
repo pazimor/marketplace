@@ -32,7 +32,7 @@ without ever breaking their grammar.
   (§ "Layout v1").
 - **Archive** (layout v2) — `.claude/journal/roadmap-YYYY-MM.md`, one file per
   month, append-only: closed tasks, finished milestones, retired specs, and the
-  history lines of open tasks, copied verbatim. Only the files named
+  history lines of tasks (written while the task was open), copied verbatim. Only the files named
   `roadmap-YYYY-MM.md` (this skill) and `canon-YYYY-MM.md` (skill
   `canon-tracker`) directly in `.claude/journal/` belong to this plugin. Leave
   every other file of that folder alone.
@@ -116,7 +116,7 @@ The project builds and its tests run on every machine.
 
 Milestone DoD: `make check` green on a fresh clone; met 2026-11-02.
 
-## History of open tasks
+## History
 
 - [~] `ROADMAP:TASK:4` Export a report as CSV — header and rows done 2026-11-03 (`pytest -q tests/test_export.py`: 4 of 5 green); remains: the date column. _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:3; claimed by alex)_
 ```
@@ -127,9 +127,11 @@ Milestone DoD: `make check` green on a fresh clone; met 2026-11-02.
   month's file; a written line is never edited, moved or deleted.
 - Lines are classified by their checkbox only, on top-level task lines:
   `- [x]` = the task is closed (once, across all the archive files);
-  `- [ ]` or `- [~]` = a history line of a task still open in the roadmap (it
-  may repeat).
+  `- [ ]` or `- [~]` = a history line of a task: written while the task is
+  open, it stays when the task is closed later (append-only), and it may
+  repeat.
 - **Each task ID is open in the roadmap or closed in the archive, never both.**
+  A history line is valid for a task that is either one of the two.
 - Finished milestone blocks (header, description, DoD) and retired specs are
   copied there verbatim.
 
@@ -155,7 +157,8 @@ Mark `[~]` + `claimed by <user>`, then follow "Implementing a task".
 with evidence. Everything passes → move its line to the end of the current
 month's archive, ticked `[x]`, its `claimed by` removed and the evidence
 written before the suffix (`— closed YYYY-MM-DD: <evidence>`); remove it from
-the roadmap. A milestone with no open task left → its block (header,
+the roadmap; its history lines already in the archive stay where they are
+(append-only). A milestone with no open task left → its block (header,
 description, DoD) moves to the archive too. Otherwise the task stays `[~]`;
 state precisely what is missing. **Never `[x]` without evidence.**
 

@@ -1133,7 +1133,11 @@ def scan_archive(report: Report, root: Path) -> Archive:
 
 
 def check_archive_cross(report: Report, root: Path, archive: Archive, tasks: dict[int, Task]) -> None:
-    """Archive against the open roadmap: a task is closed OR open, never both; history lines need an open task."""
+    """Archive against the open roadmap: a task is closed OR open, never both.
+
+    A history line is written while its task is open and stays after the task is closed (the archive is
+    append-only), so it is valid when the task is open in the roadmap OR closed in the archive; it is an
+    error only when the task is neither."""
     roadmap = root / ".claude" / "roadmap.md"
     for tid, (path, n) in archive.closed.items():
         task = tasks.get(tid)
@@ -1147,10 +1151,12 @@ def check_archive_cross(report: Report, root: Path, archive: Archive, tasks: dic
                          f"`ROADMAP:TASK:{tid}` is closed here and still open in the roadmap (line {task.line})")
     for path, n, tid in archive.history:
         task = tasks.get(tid)
-        if task is None or task.box == "x":
-            why = "closed in the archive" if tid in archive.closed else "absent from the roadmap"
-            report.error("roadmap.history-not-open", path, n,
-                         f"history line of `ROADMAP:TASK:{tid}`, which is not open in the roadmap ({why})")
+        if task is not None and task.box != "x":
+            continue  # open in the roadmap
+        if tid in archive.closed:
+            continue  # closed in the archive: the history line stays (append-only)
+        report.error("roadmap.history-not-open", path, n,
+                     f"history line of `ROADMAP:TASK:{tid}`, which is neither open in the roadmap nor closed in the archive")
 
 
 def is_v2(root: Path) -> bool:

@@ -940,9 +940,32 @@ class TestV2Archive(BaseV2):
         self.fx.write(".claude/journal/roadmap-2026-11.md", "# Archive\n\n- [x] `ROADMAP:TASK:1` Again\n")
         self.assertError("roadmap.closed-twice")
 
-    def test_history_line_of_a_closed_task(self):
+    def test_history_line_of_a_task_closed_in_the_archive_is_valid(self):
+        # Append-only: the history line was written while the task was open and stays once it is closed.
         self.fx.replace(self.ARCHIVE, "- [ ] `ROADMAP:TASK:3` history line", "- [ ] `ROADMAP:TASK:2` history line")
-        self.assertError("roadmap.history-not-open")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def _remove_task_3_from_the_roadmap(self):
+        # What the close procedure does: the line leaves the roadmap (task 5 depends on 3: closed counts as done).
+        kept = [ln for ln in self.fx.read(self.RM).splitlines(keepends=True) if "`ROADMAP:TASK:3`" not in ln]
+        self.fx.write(self.RM, "".join(kept))
+
+    def test_task_with_history_closed_later_in_the_archive(self):
+        # History in one month's archive, closed (`[x]`) at the end of a later file, gone from the roadmap.
+        self.fx.write(".claude/journal/roadmap-2026-11.md",
+                      "# Archive\n\n- [x] `ROADMAP:TASK:3` Closed title \u2014 closed 2026-11-04: evidence\n")
+        self._remove_task_3_from_the_roadmap()
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_task_with_history_closed_in_the_same_archive_file(self):
+        self.fx.write(self.ARCHIVE, dedent(V2_ARCHIVE) + "- [x] `ROADMAP:TASK:3` Closed title\n")
+        self._remove_task_3_from_the_roadmap()
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_history_line_of_a_task_neither_open_nor_closed(self):
+        self.fx.replace(self.ARCHIVE, "- [ ] `ROADMAP:TASK:3` history line", "- [ ] `ROADMAP:TASK:404` history line")
+        report = self.assertError("roadmap.history-not-open")
+        self.assertEqual([f.code for f in report.errors], ["roadmap.history-not-open"])
 
     def test_history_line_of_an_absent_task(self):
         self.fx.replace(self.ARCHIVE, "- [ ] `ROADMAP:TASK:3` history line", "- [ ] `ROADMAP:TASK:404` history line")

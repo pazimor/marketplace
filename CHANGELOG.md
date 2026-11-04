@@ -11,6 +11,9 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 
 ## [Unreleased]
 
+### plugin `orchestration` 2.0.1 — Fixed
+- **Closing a task that has history lines no longer fails the validator.** The archive is append-only, so the history lines of a task, written while it was open, stay once it is closed. `roadmap.history-not-open` is now raised only when the task is neither open in the roadmap nor closed in the archive; history lines of closed tasks are valid. The rule ID is unchanged. Wording aligned in the `roadmap-tracker` skill and `docs/grammar.md`; 3 new tests (143).
+
 ### plugin `orchestration` 2.0.0 — marketplace 0.15.0 — Changed (breaking)
 - **Decision rule.** Inside a framing you validated, the agent decides, applies and records each choice as a `[MODEL <date>] Decision: …; why: …; rejected: …; to revert: …` entry. Its report lists these decisions, with no answer expected. Revisiting one is a new entry that replaces it, and a `[USER]` entry is never contradicted (`CANON:81`, `CANON:92`).
   - What stays with you is listed by the project's canon. By default: your own channel, the product's intent, deleting your work, anything irreversible or that leaves the machine, and launching a work item.
