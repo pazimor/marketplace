@@ -16,3 +16,6 @@ venv/
 
 # Generated preview gallery (scripts/preview-agents-info.mts)
 docs/agents-info-gallery.html
+
+# Worktrees of child sessions (claude --bg --worktree)
+.claude/worktrees/

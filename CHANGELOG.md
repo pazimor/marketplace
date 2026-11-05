@@ -11,6 +11,66 @@ the version of `.claude-plugin/marketplace.json` follows every change to the cat
 
 ## [Unreleased]
 
+### plugin `orchestration` 2.0.1 — Fixed
+- **Closing a task that has history lines no longer fails the validator.** The archive is append-only, so the history lines of a task, written while it was open, stay once it is closed. `roadmap.history-not-open` is now raised only when the task is neither open in the roadmap nor closed in the archive; history lines of closed tasks are valid. The rule ID is unchanged. Wording aligned in the `roadmap-tracker` skill and `docs/grammar.md`; 3 new tests (143).
+
+### plugin `orchestration` 2.0.0 — marketplace 0.15.0 — Changed (breaking)
+- **Decision rule.** Inside a framing you validated, the agent decides, applies and records each choice as a `[MODEL <date>] Decision: …; why: …; rejected: …; to revert: …` entry. Its report lists these decisions, with no answer expected. Revisiting one is a new entry that replaces it, and a `[USER]` entry is never contradicted (`CANON:81`, `CANON:92`).
+  - What stays with you is listed by the project's canon. By default: your own channel, the product's intent, deleting your work, anything irreversible or that leaves the machine, and launching a work item.
+  - It replaces "the user decides / you escalate it" in the orchestrator, scribe and lead, and "the model flags, it does not decide" in the canon-tracker.
+- **Work size.** A small piece of work (one scope, no open question, one criterion, one commit) needs no framing: your request is the go-ahead, the main agent hands it to one executor, and it leaves one commit and one journal line, no task. It is never started on the agent's own initiative, only proposed. Medium work goes to the orchestrator, large work to the orchestrator and leads (`CANON:82`).
+- **Canon layout v2.** Pages `.claude/canon/<theme>.md` hold only the rules in force, with undated provenance, each ending with `Sources:` that cite journal IDs. No struck line, and a 40 KB budget per page by default. The history moves to `.claude/journal/canon-YYYY-MM.md`, append-only, with legacy content accepted word for word. IDs are unique across pages and journal. Nothing is ever deleted (`CANON:83`).
+- **Roadmap v2.** `.claude/roadmap.md` is a single copy in the repo, with no auto-memory mirror any more (an older memory copy: the newer wins once, then it is moved out, never deleted without you). It holds only what is open. Closed tasks, finished milestones, retired specs and the history lines of open tasks go to `.claude/journal/roadmap-YYYY-MM.md`. A task suffix gets a last element `history: <file>`, and closing a task means the DoD evidence, then moving its line to the archive (`CANON:84`, `CANON:90`).
+- **Layout switch.** A project is on v2 if and only if `.claude/journal/` is a directory. A v1 project is validated exactly as in 1.1.0 (`CANON:85`).
+- **New operations.** `canon-tracker` migrates a v1 canon to v2 and `roadmap-tracker` migrates a roadmap and its archive; both are in their skills.
+- **Validator** — 140 tests (64 new).
+  - New ERROR codes: `canon.page-rule`, `canon.page-sources`, `canon.page-strike`, `canon.unknown-source`, `roadmap.done-task`, `roadmap.history`, `roadmap.closed-and-open`, `roadmap.closed-twice`, `roadmap.history-not-open`.
+  - New WARN codes: `canon.page-size` (40 960 bytes, `CANON:87`), `journal.title`, `journal.prose`, `journal.entry`, `roadmap.done-milestone`, `roadmap.retired-spec`.
+  - Legacy violations in the journal are WARN only, duplicate IDs stay ERROR, and only `canon-YYYY-MM.md` and `roadmap-YYYY-MM.md` are read (`CANON:86`). The `history:` element is recognized only in v2 (`CANON:88`), and the archive is classified by checkbox only (`CANON:89`).
+- **Repo** — this repo's own canon stays on layout v1 (`CANON:91`). The catalog description of `orchestration` changed, hence marketplace 0.15.0 (`CANON:93`).
+- **Migrating.** A v1 project keeps working unchanged until `.claude/journal/` exists. To move to v2, run the migration operations of the canon-tracker and roadmap-tracker, then `python3 scripts/validate.py <project>`. To get the update: `claude plugin update orchestration@marketplace`, then restart the app (`CANON:38`).
+
+### plugin `orchestration` 1.1.0 — marketplace 0.14.0 — Added
+- **Child sessions.** A task whose goal is too large for one session, and whose files overlap no other task's, can go to a session of its own. You open it, follow its whole process and answer its questions there, without going up the chain (`CANON:62`, `CANON:74`). The parent session keeps its one main agent, scribe and orchestrator for the whole batch.
+- **New skill `lead`** — the contract of a child session, applied from its brief (`CANON:76`).
+  - It reads the canon and splits its one task into steps. It delegates each step to an `executor-*` with a chosen model and effort, and verifies on return.
+  - It asks you directly about its own task. Only what touches the batch goes to the parent (`CANON:75`).
+  - It calls its session's advisor before its split, after a step fails twice and before its report (`CANON:66`).
+  - It reports once to the parent session by `SendMessage`, with the same report as its final message.
+  - It launches no session, writes no code and never touches the canon or the roadmap (`CANON:63`).
+- **New agent `lead`** — the entry point of a `claude --bg` child: it loads the `lead` skill.
+- **Orchestrator** — new "Child sessions" section.
+  - **How it starts a child:** with the host's session tool (a sub-session under the parent in the desktop app) or with `claude --bg`. If neither is available, it hands ready briefs to its caller.
+  - **Where the child works:** its own worktree, or the parent's folder when its files overlap no other task's (`CANON:77`). In the parent's folder, the child commits nothing and switches no branch.
+  - **Criteria only the parent can run** are listed as pending by the lead, and the verifying orchestrator runs them (`CANON:78`).
+  - **The `claude --bg` launch line,** measured on 2026-10-19 (`CANON:68`–`CANON:72`):
+    - `--` before the brief;
+    - a permission mode the canon names, `auto` in this repo (`CANON:65`);
+    - `--worktree task-<n>`, since a task ID with `:` is not a valid branch name;
+    - `worktree.baseRef: head`;
+    - `--disallowedTools "Bash(claude *)"`.
+- **Return.** A child's work is verified by a new orchestrator before anything is merged or committed: its criterion, the parent's part included, plus the held-out cases. Merging or committing stays your call (`CANON:64`).
+- **Scribe** — § 3: the framing brief names this session, so that children can report to it. § 4 covers how child reports are handled:
+  - the task stays claimed by `session <name>`, and the held-out cases never go into any file;
+  - a child waiting on you means the scribe tells you which session to open;
+  - decisions you took in a child are recorded as `[USER]`;
+  - a shared checkout is committed by its paths.
+- **Repo** — `.gitignore` now ignores `.claude/worktrees/`.
+- **Validator** — new `plugin.launch-separator` ERROR: a `claude --bg` command written in a plugin needs `--` after its last list option, or that option takes the prompt (`CANON:68`). Two new tests.
+- **Canon** — `CANON:62`–`CANON:80`. `CANON:43` (no agent depends on the advisor) is obsolete, replaced by `CANON:66`. Showing child sessions in `agents-info` is a separate, later phase (`CANON:67`).
+- **Checked:**
+  - end to end on 2026-10-19, with a CLI 2.1.287 child launched from a desktop session and the lead loaded from the branch (`CANON:73`);
+  - on 2026-10-23, that a subagent of a desktop session sees the app's session tool (`CANON:79`).
+
+  A `claude --bg` child uses the `claude` on your PATH and its own login, not the app's (`CANON:69`). To get it: `claude plugin update orchestration@marketplace`, then restart the app (`CANON:38`).
+
+### plugin `agents-info` 0.11.0 — marketplace 0.14.0 — Fixed
+- The pane no longer loses its figures when the process restarts (an update of the app, a resumed session), which left it showing `no measure yet`. The recap is saved in the Mod's own store under `recap:<session id>`: at the end of each main turn, at most once a minute while sub-agents finish inside a long turn, and when the session ends. It is restored when the session starts again. Sub-agents that were running are marked done, a live plan is dropped, limit windows that reset since then are dropped, and the downtime does not count as worked time (`CANON:49`). The pane header says `restored HH:MM` when that happened. Snapshots older than 3 days are pruned.
+- The limits and the cost are read from the engine when the session starts and at the end of each main turn, without waiting for the next measurement.
+- In the desktop app the pane never opened on its own: the session starts non-interactive. It now opens when the app attaches, unless you closed it; `/agents-info` opens it again. A pane left waiting undrawn says why in the debug log and in the answer to `/agents-info`.
+- A failure while reading the settings or the model at start no longer costs the session its `plan` / `step` tools and its pane. A pane whose drawing throws shows the error instead of vanishing, and logs it.
+- Checked on Claude Code 2.1.295: `claude plugin validate`, `claude plugin test` (33 tests), type-check against the 2.1.295 declarations. To get it: `claude plugin update agents-info@marketplace`, then restart the app (`CANON:38`).
+
 ### plugins `orchestration` 1.0.1, `level-design` 0.2.1, `agents-info` 0.10.1 — marketplace 0.13.1 — Changed
 - Author and owner name is now `pazimor` in every manifest, with no email; canon provenance and grammar examples read `[USER:pazimor …]`.
 - `.claude/types/` (engine declarations generated by `/plugin-types`) is no longer tracked by git; regenerate it locally. `CANON:14` is deprecated, replaced by `CANON:56`.

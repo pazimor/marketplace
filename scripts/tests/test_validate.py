@@ -5,6 +5,7 @@ Run from the repo root: python3 -m unittest discover -s scripts/tests -v
 
 import io
 import json
+import shutil
 import sys
 import tempfile
 import textwrap
@@ -308,6 +309,25 @@ class TestFrontmatter(Base):
                 self.fx.write(self.AGENT_PATH, dedent(AGENT).replace("effort: high", f"{key}:\n  - x"))
                 self.assertWarning("frontmatter.plugin-agent-ignored")
 
+    def test_launch_line_list_option_without_separator(self):
+        for body in ('`claude --bg --model <m> --disallowedTools "Bash(claude *)" "<task brief>"`',
+                     '`claude --background --add-dir=../x "<brief>"`',
+                     '```bash\nclaude --bg -n t1 --allowedTools Read Grep "<brief>"\n```'):
+            with self.subTest(body=body):
+                self.fx.replace(self.AGENT_PATH, "Body.", f"Body.\n\n{body}\n")
+                self.assertError("plugin.launch-separator")
+                self.fx.write(self.AGENT_PATH, dedent(AGENT))
+
+    def test_launch_line_separator_ok(self):
+        for body in ('`claude --bg --disallowedTools "Bash(claude *)" -- "<task brief>"`',
+                     '`claude --bg --model <m> "<task brief>"`',
+                     '`claude -p --disallowedTools Bash "<brief>"`',
+                     'add `--disallowedTools "Bash(claude *)"` to the line'):
+            with self.subTest(body=body):
+                self.fx.replace(self.AGENT_PATH, "Body.", f"Body.\n\n{body}\n")
+                self.assertEqual(self.run_validate().findings, [])
+                self.fx.write(self.AGENT_PATH, dedent(AGENT))
+
     def test_ignored_fields_ok_in_skill(self):
         self.fx.replace(self.SKILL_PATH, "description: Maintain the roadmap.", "description: x\nhooks: {}")
         self.assertEqual(self.run_validate().findings, [])
@@ -524,6 +544,485 @@ class TestRepository(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         report = validate.validate(root)
         self.assertEqual(report.errors, [], "\n".join(map(str, report.errors)))
+
+
+# ---------------------------------------------------------------------------------------------
+# Layout v2: a `.claude/journal/` folder switches the canon and roadmap checks.
+# ---------------------------------------------------------------------------------------------
+
+V2_PAGE = """\
+    # Tests
+
+    ## Suite
+
+    - `CANON:20` [USER:pazimor] The suite runs from the repo root. Sources: `CANON:12`.
+    - `CANON:21` [MODEL] `pytest -q` takes about 40 s. Sources : `CANON:12`, `CANON:13`.
+
+    ### Network
+
+    - `CANON:22` [USER:Alex Q] A test that touches the network is rejected, see `CANON:20`. Sources: `CANON:13`.
+    """
+
+V2_JOURNAL = """\
+    # Canon journal 2026-10
+
+    - `CANON:12` [USER:pazimor 2026-10-02] Run the suite from the repo root.
+    - `CANON:13` [USER:pazimor 2026-10-03] The network is off in tests. (promoted from MODEL)
+    - ~~`CANON:9` [MODEL 2026-07-02] The tests run via `make test`.~~
+      — obsolete 2026-08-14: replaced by `CANON:12`.
+    """
+
+V2_ROADMAP = """\
+    # Roadmap
+
+    ## Specs
+
+    - `ROADMAP:SPEC:1` **Spec title** [active]
+      - Canon: the settled design.
+
+    Rules:
+    - rule 1
+
+    ## M2 — Second (`ROADMAP:MILESTONE:2`, active)
+
+    Milestone DoD: other criterion.
+
+    - [~] `ROADMAP:TASK:3` Title _(implements ROADMAP:SPEC:1; depends on ROADMAP:TASK:1; claimed by pazimor; history: roadmap-2026-10.md)_
+    - [~] `ROADMAP:TASK:4` Title _(blocked: waiting for an answer; with a semicolon; history: roadmap-2026-10.md)_
+    - [ ] `ROADMAP:TASK:5` Title _(depends on ROADMAP:TASK:3)_
+
+    ## Backlog (no milestone)
+
+    - [ ] `ROADMAP:TASK:6` [RESEARCH] Idea (cf. CANON:20)
+    """
+
+V2_ARCHIVE = """\
+    # Roadmap archive 2026-10
+
+    ## M1 — First (`ROADMAP:MILESTONE:1`, done)
+
+    - `ROADMAP:SPEC:7` **Old spec** [retired]
+
+    - [x] `ROADMAP:TASK:1` Closed title _(implements ROADMAP:SPEC:7)_
+    - [x] `ROADMAP:TASK:2` Closed title
+      - [x] `ROADMAP:TASK:77` indented line, ignored
+    - [ ] `ROADMAP:TASK:3` history line of an open task
+    - [~] `ROADMAP:TASK:3` second history line, same ID
+    """
+
+
+class FixtureV2(Fixture):
+    """A conforming v2 project: pages with Sources, canon journal, roadmap, roadmap archive."""
+
+    def __init__(self):
+        super().__init__()
+        shutil.rmtree(self.root / ".claude" / "canon")
+        self.write(".claude/canon/tests.md", dedent(V2_PAGE))
+        self.write(".claude/journal/canon-2026-10.md", dedent(V2_JOURNAL))
+        self.write(".claude/journal/roadmap-2026-10.md", dedent(V2_ARCHIVE))
+        self.write(".claude/roadmap.md", dedent(V2_ROADMAP))
+
+
+class BaseV2(Base):
+    PAGE = ".claude/canon/tests.md"
+    JOURNAL = ".claude/journal/canon-2026-10.md"
+    ARCHIVE = ".claude/journal/roadmap-2026-10.md"
+    RM = ".claude/roadmap.md"
+
+    def setUp(self):
+        self.fx = FixtureV2()
+        self.addCleanup(self.fx.cleanup)
+
+    def assertNoError(self):
+        report = self.run_validate()
+        self.assertEqual(report.errors, [], "\n".join(map(str, report.errors)))
+        return report
+
+
+class TestV2Valid(BaseV2):
+    def test_conforming_project_has_no_findings(self):
+        report = self.run_validate()
+        self.assertEqual(report.findings, [], "\n".join(map(str, report.findings)))
+
+    def test_sources_with_space_before_colon(self):
+        # CANON:21 of the fixture already uses `Sources :`; the dotted form passes too.
+        self.assertIn("Sources :", self.fx.read(self.PAGE))
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_sources_without_final_dot_and_trailing_spaces(self):
+        self.fx.replace(self.PAGE, "`CANON:12`.\n", "`CANON:12`   \n")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_main_exit_code(self):
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(validate.main([str(self.fx.root)]), 0)
+            self.fx.replace(self.PAGE, "Sources: `CANON:12`.", "")
+            self.assertEqual(validate.main([str(self.fx.root)]), 1)
+
+    def test_journal_folder_without_files_is_v2(self):
+        # The folder alone switches the layout: a v1 entry on a page is no longer valid.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / ".claude" / "journal").mkdir(parents=True)
+            (root / ".claude" / "canon").mkdir(parents=True)
+            (root / ".claude" / "canon" / "tests.md").write_text(
+                "# Tests\n\n- `CANON:1` [MODEL 2026-09-01] v1 entry.\n", encoding="utf-8")
+            self.assertIn("canon.page-rule", validate.validate(root).codes(validate.ERROR))
+
+    def test_other_files_of_the_journal_are_ignored(self):
+        notes = ("# Notes\n\n```\n- `CANON:12` [MODEL 2026-01-01] copy\n- [x] `ROADMAP:TASK:1` closed again\n"
+                 "- [ ] `ROADMAP:TASK:999` history of nothing\n```\n\n`CANON:20` stray\n")
+        for name in ("notes-2026-11.md", "canon-2026-1.md", "roadmap-archive.md", "canon-2026-10.md.bak"):
+            with self.subTest(name=name):
+                self.fx.write(f".claude/journal/{name}", notes)
+                self.assertEqual(self.run_validate().findings, [])
+
+
+class TestV2CanonPages(BaseV2):
+    def test_title_required(self):
+        self.fx.replace(self.PAGE, "# Tests\n", "Tests\n")
+        self.assertError("canon.title")
+
+    def test_prose_forbidden(self):
+        self.fx.replace(self.PAGE, "## Suite\n", "## Suite\n\nA free paragraph.\n")
+        self.assertError("canon.prose")
+
+    def test_headings_of_any_text_and_blank_lines_ok(self):
+        self.fx.replace(self.PAGE, "## Suite", "## Une suite — n'importe quel titre !")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_continuation_line_rejected(self):
+        self.fx.replace(self.PAGE, "from the repo root. Sources: `CANON:12`.",
+                        "from the repo root.\n      Sources: `CANON:12`.")
+        self.assertError("canon.page-rule")
+
+    def test_dated_user_provenance_rejected(self):
+        self.fx.replace(self.PAGE, "[USER:pazimor]", "[USER:pazimor 2026-11-04]")
+        report = self.assertError("canon.page-rule")
+        self.assertNotIn("canon.page-sources", report.codes())
+
+    def test_dated_model_provenance_rejected(self):
+        self.fx.replace(self.PAGE, "[MODEL]", "[MODEL 2026-11-04]")
+        self.assertError("canon.page-rule")
+
+    def test_missing_backticks_rejected(self):
+        self.fx.replace(self.PAGE, "`CANON:20` [USER", "CANON:20 [USER")
+        self.assertError("canon.page-rule")
+
+    def test_empty_text_rejected(self):
+        self.fx.replace(self.PAGE, "The suite runs from the repo root. Sources", "Sources")
+        self.assertError("canon.page-rule")
+
+    def test_missing_sources_tail(self):
+        self.fx.replace(self.PAGE, " Sources: `CANON:12`.", "")
+        self.assertError("canon.page-sources")
+
+    def test_malformed_sources_tails(self):
+        for tail in ("Sources: CANON:12.", "Sources: `CANON:12` `CANON:13`.", "Sources:", "Sources: `CANON:12`, ",
+                     "Sources: `CANON:12`; `CANON:13`.", "Sources: `CANON:12`. Later."):
+            with self.subTest(tail=tail):
+                self.fx.write(self.PAGE, dedent(V2_PAGE).replace("Sources: `CANON:12`.", tail, 1))
+                self.assertError("canon.page-sources")
+
+    def test_strike_forbidden(self):
+        self.fx.replace(self.PAGE, "The suite runs", "~~The suite~~ runs")
+        self.assertError("canon.page-strike")
+
+    def test_obsolete_marker_forbidden(self):
+        for mark in ("— obsolete 2026-08-14: gone", "— obsolète 2026-08-14 : parti"):
+            with self.subTest(mark=mark):
+                self.fx.write(self.PAGE, dedent(V2_PAGE).replace("takes about 40 s.", f"takes 40 s. {mark}"))
+                self.assertError("canon.page-strike")
+
+    def test_misc_page(self):
+        self.fx.write(".claude/canon/misc.md", "# Misc\n")
+        self.assertError("canon.misc")
+
+    def test_page_over_budget_warns_only(self):
+        self.fx.write(self.PAGE, dedent(V2_PAGE) + "".join(
+            f"- `CANON:{1000 + i}` [MODEL] {'x' * 120} Sources: `CANON:12`.\n" for i in range(400)))
+        self.assertGreater(len((self.fx.root / self.PAGE).read_bytes()), validate.PAGE_BUDGET)
+        report = self.assertWarning("canon.page-size")
+        self.assertEqual(report.codes(validate.ERROR), [])
+
+    def test_unknown_ref_in_rule_text_warns(self):
+        self.fx.replace(self.PAGE, "see `CANON:20`", "see `CANON:777`")
+        self.assertWarning("canon.unknown-ref")
+
+    def test_source_must_exist(self):
+        self.fx.replace(self.PAGE, "Sources: `CANON:12`.", "Sources: `CANON:777`.")
+        self.assertError("canon.unknown-source")
+
+    def test_source_must_be_a_journal_entry_not_a_page_rule(self):
+        self.fx.replace(self.PAGE, "Sources: `CANON:12`.", "Sources: `CANON:21`.")
+        report = self.assertError("canon.unknown-source")
+        self.assertIn("only a page rule", "\n".join(map(str, report.findings)))
+
+
+class TestV2Ids(BaseV2):
+    def test_duplicate_between_two_pages(self):
+        self.fx.write(".claude/canon/conventions.md", "# Conventions\n\n- `CANON:20` [MODEL] Again. Sources: `CANON:12`.\n")
+        self.assertError("canon.duplicate-id")
+
+    def test_duplicate_between_page_and_journal(self):
+        self.fx.replace(self.PAGE, "`CANON:21` [MODEL]", "`CANON:13` [MODEL]")
+        self.assertError("canon.duplicate-id")
+
+    def test_duplicate_inside_a_journal_file(self):
+        self.fx.replace(self.JOURNAL, "`CANON:13` [USER:pazimor 2026-10-03]", "`CANON:12` [MODEL 2026-10-03]")
+        self.assertError("canon.duplicate-id")
+
+    def test_duplicate_across_journal_months(self):
+        self.fx.write(".claude/journal/canon-2026-11.md", "# Canon journal 2026-11\n\n- `CANON:12` [MODEL 2026-11-01] Again.\n")
+        self.assertError("canon.duplicate-id")
+
+    def test_source_in_another_month_ok(self):
+        self.fx.write(".claude/journal/canon-2026-11.md", "# Canon journal 2026-11\n\n- `CANON:30` [MODEL 2026-11-01] New.\n")
+        self.fx.replace(self.PAGE, "Sources: `CANON:12`.", "Sources: `CANON:30`.")
+        self.assertEqual(self.run_validate().findings, [])
+
+
+class TestV2Journal(BaseV2):
+    def test_legacy_content_is_tolerated(self):
+        self.fx.write(self.JOURNAL, dedent("""\
+            # Journal
+
+            ## Un titre libre
+            - ~~`CANON:9` [MODEL 2026-07-02] Struck, French marker.~~ — obsolète 2026-08-14 : remplacée par `CANON:12`.
+            - ~~`CANON:10` [MODEL 2026-07-02] Struck, no obsolete marker at all.~~
+            `CANON:604` [MODEL 2026-10-05] Entry without the leading dash.
+            - ~~`CANON:11` [USER:pazimor 2026-07-02] Whole entry struck.~~
+              — obsolete 2026-08-14: replaced by `CANON:12`.
+            - `CANON:12` [USER:pazimor 2026-10-02] Run the suite from the repo root.
+            - `CANON:13` [MODEL 2026-10-03] Another.
+            """))
+        report = self.run_validate()
+        self.assertEqual(report.errors, [], "\n".join(map(str, report.errors)))
+        entry = [f for f in report.warnings if f.code == "journal.entry"]
+        self.assertTrue(entry)
+        self.assertTrue(all("v1 check `canon." in f.message for f in entry))
+
+    def test_malformed_entry_is_a_warning(self):
+        self.fx.write(self.JOURNAL, dedent("""\
+            # Journal
+
+            - `CANON:12` [USER:pazimor 2026-13-45] Impossible date.
+            - `CANON:13` [OTHER 2026-10-03] Bad provenance.
+            """))
+        report = self.assertWarning("journal.entry")
+        self.assertNotIn("canon.entry", report.codes())
+
+    def test_missing_title_warns(self):
+        self.fx.replace(self.JOURNAL, "# Canon journal 2026-10\n", "Canon journal\n")
+        self.assertWarning("journal.title")
+
+    def test_unrecognised_line_warns(self):
+        self.fx.replace(self.JOURNAL, "- `CANON:13`", "Stray paragraph.\n- `CANON:13`")
+        self.assertWarning("journal.prose")
+
+    def test_fenced_blocks_are_never_entries(self):
+        self.fx.write(self.JOURNAL, dedent(V2_JOURNAL) + dedent("""\
+
+            ```
+            - `CANON:12` [MODEL 2026-10-03] A copy, inside a fence.
+            some prose
+            ```
+
+            ````md
+            ```
+            - `CANON:13` [MODEL 2026-10-03] Nested fence.
+            ```
+            - `CANON:9` [MODEL 2026-10-03] Still inside the outer fence.
+            ````
+            """))
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_unknown_ref_in_journal_warns(self):
+        self.fx.replace(self.JOURNAL, "Run the suite", "Run (see `CANON:888`) the suite")
+        self.assertWarning("canon.unknown-ref")
+
+    def test_continuation_lines_join_the_entry(self):
+        self.fx.replace(self.JOURNAL, "Run the suite from the repo root.",
+                        "Run the suite\n      from the repo root, on two lines.")
+        self.assertEqual(self.run_validate().findings, [])
+
+
+class TestV2Roadmap(BaseV2):
+    def test_v1_checks_still_apply(self):
+        self.fx.replace(self.RM, "# Roadmap\n", "# Plan\n")
+        self.assertError("roadmap.title")
+
+    def test_done_task_rejected(self):
+        self.fx.replace(self.RM, "- [ ] `ROADMAP:TASK:6`", "- [x] `ROADMAP:TASK:6`")
+        self.assertError("roadmap.done-task")
+
+    def test_history_element_valid_and_last(self):
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_history_bad_name(self):
+        for name in ("notes.md", "roadmap-2026.md", "../roadmap-2026-10.md", "roadmap-2026-10.txt"):
+            with self.subTest(name=name):
+                self.fx.write(self.RM, dedent(V2_ROADMAP).replace("history: roadmap-2026-10.md)_", f"history: {name})_", 1))
+                self.assertError("roadmap.history")
+
+    def test_history_file_must_exist(self):
+        self.fx.replace(self.RM, "history: roadmap-2026-10.md)_", "history: roadmap-2026-09.md)_")
+        self.assertError("roadmap.history")
+
+    def test_history_must_come_last(self):
+        self.fx.replace(self.RM, "depends on ROADMAP:TASK:1; claimed by pazimor; history: roadmap-2026-10.md)_",
+                        "history: roadmap-2026-10.md; depends on ROADMAP:TASK:1; claimed by pazimor)_")
+        self.assertError("roadmap.suffix-order")
+
+    def test_history_after_blocked_does_not_leak_into_blocked(self):
+        self.assertNoError()
+        self.fx.replace(self.RM, "with a semicolon; history: roadmap-2026-10.md)_",
+                        "with a semicolon; history: roadmap-2026-09.md)_")
+        self.assertError("roadmap.history")
+
+    def test_history_without_value(self):
+        self.fx.replace(self.RM, "claimed by pazimor; history: roadmap-2026-10.md)_", "claimed by pazimor; history:)_")
+        self.assertError("roadmap.suffix")
+
+    def test_history_repeated(self):
+        self.fx.replace(self.RM, "claimed by pazimor; history: roadmap-2026-10.md)_",
+                        "claimed by pazimor; history: roadmap-2026-10.md; history: roadmap-2026-10.md)_")
+        self.assertError("roadmap.suffix")
+
+    def test_done_milestone_and_retired_spec_warn(self):
+        self.fx.replace(self.RM, "(`ROADMAP:MILESTONE:2`, active)", "(`ROADMAP:MILESTONE:2`, done)")
+        self.fx.replace(self.RM, "**Spec title** [active]", "**Spec title** [retired]")
+        report = self.run_validate()
+        self.assertIn("roadmap.done-milestone", report.codes(validate.WARNING))
+        self.assertIn("roadmap.retired-spec", report.codes(validate.WARNING))
+
+    def test_retired_spec_alone_is_only_a_warning(self):
+        self.fx.replace(self.RM, "**Spec title** [active]", "**Spec title** [retired]")
+        self.assertWarning("roadmap.retired-spec")
+
+    def test_dependency_closed_in_the_archive_is_known_and_done(self):
+        # TASK:3 depends on TASK:1, which only exists, closed, in the archive: no unknown-ref, no warning.
+        report = self.run_validate()
+        self.assertEqual(report.findings, [], "\n".join(map(str, report.findings)))
+
+    def test_dependency_nowhere_is_unknown(self):
+        self.fx.replace(self.RM, "depends on ROADMAP:TASK:1;", "depends on ROADMAP:TASK:99;")
+        self.assertError("roadmap.unknown-ref")
+
+    def test_spec_closed_in_the_archive_is_known(self):
+        self.fx.replace(self.RM, "implements ROADMAP:SPEC:1; depends", "implements ROADMAP:SPEC:7; depends")
+        self.assertEqual(self.run_validate().findings, [])
+        self.fx.replace(self.RM, "implements ROADMAP:SPEC:7;", "implements ROADMAP:SPEC:8;")
+        self.assertError("roadmap.unknown-ref")
+
+    def test_canon_refs_resolve_against_pages_and_journal(self):
+        self.fx.replace(self.RM, "cf. CANON:20", "cf. CANON:12, CANON:20, CANON:9")
+        self.assertEqual(self.run_validate().findings, [])
+        self.fx.replace(self.RM, "CANON:9)", "CANON:555)")
+        self.assertWarning("roadmap.unknown-canon-ref")
+
+    def test_roadmap_still_checks_open_dependency_state(self):
+        self.fx.replace(self.RM, "- [ ] `ROADMAP:TASK:5` Title _(depends on ROADMAP:TASK:3)_",
+                        "- [~] `ROADMAP:TASK:5` Title _(depends on ROADMAP:TASK:6; claimed by x)_")
+        self.assertWarning("roadmap.dependency-not-done")
+
+
+class TestV2Archive(BaseV2):
+    def test_closed_and_open(self):
+        self.fx.replace(self.ARCHIVE, "- [x] `ROADMAP:TASK:2` Closed title", "- [x] `ROADMAP:TASK:5` Closed title")
+        self.assertError("roadmap.closed-and-open")
+
+    def test_closed_twice_in_one_file(self):
+        self.fx.replace(self.ARCHIVE, "- [x] `ROADMAP:TASK:2` Closed title", "- [x] `ROADMAP:TASK:1` Closed title")
+        self.assertError("roadmap.closed-twice")
+
+    def test_closed_twice_across_files(self):
+        self.fx.write(".claude/journal/roadmap-2026-11.md", "# Archive\n\n- [x] `ROADMAP:TASK:1` Again\n")
+        self.assertError("roadmap.closed-twice")
+
+    def test_history_line_of_a_task_closed_in_the_archive_is_valid(self):
+        # Append-only: the history line was written while the task was open and stays once it is closed.
+        self.fx.replace(self.ARCHIVE, "- [ ] `ROADMAP:TASK:3` history line", "- [ ] `ROADMAP:TASK:2` history line")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def _remove_task_3_from_the_roadmap(self):
+        # What the close procedure does: the line leaves the roadmap (task 5 depends on 3: closed counts as done).
+        kept = [ln for ln in self.fx.read(self.RM).splitlines(keepends=True) if "`ROADMAP:TASK:3`" not in ln]
+        self.fx.write(self.RM, "".join(kept))
+
+    def test_task_with_history_closed_later_in_the_archive(self):
+        # History in one month's archive, closed (`[x]`) at the end of a later file, gone from the roadmap.
+        self.fx.write(".claude/journal/roadmap-2026-11.md",
+                      "# Archive\n\n- [x] `ROADMAP:TASK:3` Closed title \u2014 closed 2026-11-04: evidence\n")
+        self._remove_task_3_from_the_roadmap()
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_task_with_history_closed_in_the_same_archive_file(self):
+        self.fx.write(self.ARCHIVE, dedent(V2_ARCHIVE) + "- [x] `ROADMAP:TASK:3` Closed title\n")
+        self._remove_task_3_from_the_roadmap()
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_history_line_of_a_task_neither_open_nor_closed(self):
+        self.fx.replace(self.ARCHIVE, "- [ ] `ROADMAP:TASK:3` history line", "- [ ] `ROADMAP:TASK:404` history line")
+        report = self.assertError("roadmap.history-not-open")
+        self.assertEqual([f.code for f in report.errors], ["roadmap.history-not-open"])
+
+    def test_history_line_of_an_absent_task(self):
+        self.fx.replace(self.ARCHIVE, "- [ ] `ROADMAP:TASK:3` history line", "- [ ] `ROADMAP:TASK:404` history line")
+        self.assertError("roadmap.history-not-open")
+
+    def test_history_lines_may_repeat(self):
+        self.assertEqual(self.run_validate().findings, [])
+        self.fx.write(self.ARCHIVE, dedent(V2_ARCHIVE) + "- [ ] `ROADMAP:TASK:3` third\n")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_free_prose_and_titles_in_any_language_tolerated(self):
+        self.fx.write(self.ARCHIVE, dedent(V2_ARCHIVE) + dedent("""\
+
+            ## Jalon 4 — Terminé (`ROADMAP:MILESTONE:4`, terminé)
+
+            Du texte libre, des décisions datées.
+
+            Rules:
+            - une règle
+
+            - `ROADMAP:SPEC:12` **Spec** [obsolète]
+              - Canon: texte
+            """))
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_fenced_lines_of_the_archive_ignored(self):
+        self.fx.write(self.ARCHIVE, dedent(V2_ARCHIVE) + "\n```\n- [x] `ROADMAP:TASK:1` copy\n- [ ] `ROADMAP:TASK:404` x\n```\n")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_other_checkboxes_ignored(self):
+        self.fx.write(self.ARCHIVE, dedent(V2_ARCHIVE) + "- [X] `ROADMAP:TASK:5` odd box\n- [?] `ROADMAP:TASK:404` odd\n")
+        self.assertEqual(self.run_validate().findings, [])
+
+    def test_no_roadmap_skips_cross_checks_but_not_closed_twice(self):
+        (self.fx.root / self.RM).unlink()
+        self.assertEqual(self.run_validate().findings, [])
+        self.fx.write(".claude/journal/roadmap-2026-11.md", "- [x] `ROADMAP:TASK:1` Again\n")
+        self.assertError("roadmap.closed-twice")
+
+
+class TestV1Unchanged(Base):
+    def test_history_suffix_is_an_unknown_element_in_v1(self):
+        self.fx.replace(".claude/roadmap.md", "_(depends on ROADMAP:TASK:3)_",
+                        "_(depends on ROADMAP:TASK:3; history: roadmap-2026-10.md)_")
+        report = self.assertError("roadmap.suffix")
+        text = "\n".join(map(str, report.findings))
+        self.assertIn("(expected implements / depends on / claimed by / blocked:)", text)
+
+    def test_closed_task_and_done_milestone_are_fine_in_v1(self):
+        report = self.run_validate()
+        self.assertEqual(report.findings, [])
+        self.assertIn("[x]", self.fx.read(".claude/roadmap.md"))
+
+    def test_journal_files_are_not_read_without_the_folder(self):
+        # A v1 project: canon files carry dated entries, no `.claude/journal/` anywhere.
+        self.assertFalse((self.fx.root / ".claude" / "journal").exists())
+        self.assertEqual(self.run_validate().findings, [])
 
 
 if __name__ == "__main__":

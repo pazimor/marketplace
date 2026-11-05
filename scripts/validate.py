@@ -4,8 +4,13 @@
 Checks, under a project root:
   - the manifests `.claude-plugin/marketplace.json` and `plugins/*/.claude-plugin/plugin.json`;
   - the frontmatter of agents (`plugins/*/agents/*.md`) and skills (`plugins/*/skills/*/SKILL.md`);
+  - the `claude --bg` launch lines written in a plugin's markdown;
   - the canon grammar (`.claude/canon/*.md`);
   - the roadmap grammar (`.claude/roadmap.md`).
+
+Two layouts (see `docs/grammar.md`): v1 (canon entries in `.claude/canon/`, one roadmap file) and v2,
+selected as soon as the project has a `.claude/journal/` folder (canon pages with `Sources`, journal
+`canon-YYYY-MM.md`, roadmap archive `roadmap-YYYY-MM.md`). Without that folder, v1 runs unchanged.
 
 Each missing part is skipped: the script runs as well on this marketplace as on a project that only
 uses the plugin (canon + roadmap only).
@@ -23,6 +28,7 @@ import argparse
 import datetime
 import json
 import re
+import shlex
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -346,6 +352,49 @@ def check_model_mentions(report: Report, root: Path) -> None:
                              f"model name outside an agent's frontmatter: {m.group(0)!r} (`CANON:22`)")
 
 
+# Options of `claude` that take a list: they also take the prompt that follows them, and a
+# background session launched that way starts idle, with no prompt (`CANON:68`).
+VARIADIC_CLI_OPTIONS = {"--add-dir", "--allowedTools", "--allowed-tools", "--betas",
+                        "--disallowedTools", "--disallowed-tools", "--file", "--mcp-config", "--tools"}
+CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
+
+
+def _launch_missing_separator(command: str) -> str | None:
+    """The list option of a `claude --bg` command that no `--` follows, or None."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    if "claude" not in tokens or not {"--bg", "--background"} & set(tokens):
+        return None
+    last = None
+    for i, token in enumerate(tokens):
+        if token.split("=", 1)[0] in VARIADIC_CLI_OPTIONS:
+            last = i
+    if last is None or "--" in tokens[last + 1:]:
+        return None
+    return tokens[last].split("=", 1)[0]
+
+
+def check_launch_lines(report: Report, root: Path) -> None:
+    """A `claude --bg` command written in a plugin puts `--` between its list options and its prompt."""
+    for path in sorted(root.glob("plugins/**/*.md")):
+        text = read_text(report, path)
+        if text is None:
+            continue
+        in_fence = False
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            for command in [line] if in_fence else CODE_SPAN_RE.findall(line):
+                option = _launch_missing_separator(command)
+                if option:
+                    report.error("plugin.launch-separator", path, n,
+                                 f"`claude --bg` with `{option}` and no `--` before the prompt: "
+                                 f"the list option takes the prompt and the session starts idle")
+
+
 # ---------------------------------------------------------------------------------------------
 # Canon — grammar: canon-tracker skill, § "Entry grammar"
 # ---------------------------------------------------------------------------------------------
@@ -531,24 +580,36 @@ class Task:
     depends: list[int] = field(default_factory=list)
     claimed_by: str | None = None
     blocked: str | None = None
+    history: str | None = None
     milestone: int | None = None
 
 
-def parse_suffix(report: Report, path: Path, line: int, suffix: str, task: Task) -> None:
+def parse_suffix(report: Report, path: Path, line: int, suffix: str, task: Task,
+                 archive: "Archive | None" = None) -> None:
+    """`archive` is None in the v1 layout; in v2 the suffix also accepts a last `history: <file>`."""
+    v2 = archive is not None
+    order = SUFFIX_ORDER + ["history"] if v2 else SUFFIX_ORDER
     parts = suffix.split("; ")
     keys_seen: list[str] = []
     idx = 0
     while idx < len(parts):
         part = parts[idx]
         if part.startswith("blocked:"):
-            key, value = "blocked", "; ".join(parts[idx:])[len("blocked:"):].strip()
-            idx = len(parts)
+            end = len(parts)
+            if v2:  # `blocked:` swallows the rest, except a trailing `history:` element
+                end = next((j for j in range(idx + 1, len(parts)) if parts[j].startswith("history:")), end)
+            key, value = "blocked", "; ".join(parts[idx:end])[len("blocked:"):].strip()
+            idx = end
+        elif v2 and part.startswith("history:"):
+            key, value = "history", part[len("history:"):].strip()
+            idx += 1
         else:
             key = next((k for k in SUFFIX_ORDER[:3] if part.startswith(k + " ")), None)
             if key is None:
+                expected = ("implements / depends on / claimed by / blocked: / history:" if v2
+                            else "implements / depends on / claimed by / blocked:")
                 report.error("roadmap.suffix", path, line,
-                             f"unknown suffix element: {part!r} "
-                             "(expected implements / depends on / claimed by / blocked:)")
+                             f"unknown suffix element: {part!r} (expected {expected})")
                 idx += 1
                 continue
             value = part[len(key) + 1:].strip()
@@ -556,9 +617,10 @@ def parse_suffix(report: Report, path: Path, line: int, suffix: str, task: Task)
         if key in keys_seen:
             report.error("roadmap.suffix", path, line, f"`{key}` repeated in the suffix")
             continue
-        if keys_seen and SUFFIX_ORDER.index(key) < SUFFIX_ORDER.index(keys_seen[-1]):
+        if keys_seen and order.index(key) < order.index(keys_seen[-1]):
             report.error("roadmap.suffix-order", path, line,
-                         "suffix order: implements; depends on; claimed by; blocked:")
+                         "suffix order: implements; depends on; claimed by; blocked:"
+                         + ("; history:" if v2 else ""))
         keys_seen.append(key)
         if not value:
             report.error("roadmap.suffix", path, line, f"`{key}` without a value")
@@ -575,17 +637,30 @@ def parse_suffix(report: Report, path: Path, line: int, suffix: str, task: Task)
                     target.append(int(mm.group(1)))
         elif key == "claimed by":
             task.claimed_by = value
+        elif key == "history":
+            task.history = value
+            if not JOURNAL_ROADMAP_RE.match(value):
+                report.error("roadmap.history", path, line,
+                             f"`history:` expects a file named roadmap-YYYY-MM.md: {value!r}")
+            elif value not in archive.files:
+                report.error("roadmap.history", path, line,
+                             f"`history: {value}` does not exist in .claude/journal/")
         else:
             task.blocked = value
 
 
-def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | None = None) -> None:
+def check_roadmap(report: Report, root: Path, canon=None, archive: "Archive | None" = None):
+    """Checks `.claude/roadmap.md`; `archive` (v2 layout only) switches on the v2 rules.
+
+    Returns the tasks found (id -> Task), or None when there is no readable roadmap.
+    """
     path = root / ".claude" / "roadmap.md"
     if not path.is_file():
-        return
+        return None
     text = read_text(report, path)
     if text is None:
-        return
+        return None
+    v2 = archive is not None
     lines = text.splitlines()
 
     first = next(((n, l) for n, l in enumerate(lines, 1) if l.strip()), None)
@@ -620,7 +695,7 @@ def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | Non
         sm = SUFFIX_RE.search(rest)
         title = rest[: sm.start()].strip() if sm else rest.strip()
         if sm:
-            parse_suffix(report, path, t.line, sm.group("suffix"), t)
+            parse_suffix(report, path, t.line, sm.group("suffix"), t, archive)
         elif "_(" in rest:
             report.error("roadmap.suffix", path, t.line, "suffix `_(` not closed by `)_`")
         if not title:
@@ -669,6 +744,9 @@ def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | Non
                         report.warn("roadmap.milestone-number", path, n,
                                     f"M{m.group('num')} carries the ID `ROADMAP:MILESTONE:{mid}`")
                     milestones[mid] = (n, m.group("status"))
+                    if v2 and m.group("status") == "done":
+                        report.warn("roadmap.done-milestone", path, n,
+                                    f"`ROADMAP:MILESTONE:{mid}` is done: it belongs in the archive")
                     milestone_tasks[mid] = []
                     milestone_dod[mid] = False
                     section = ("milestone", mid)
@@ -704,6 +782,9 @@ def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | Non
                                      f"`ROADMAP:SPEC:{sid}` already used (line {specs[sid]})")
                     else:
                         specs[sid] = n
+                    if v2 and m.group("status") == "retired":
+                        report.warn("roadmap.retired-spec", path, n,
+                                    f"`ROADMAP:SPEC:{sid}` is retired: it belongs in the archive")
                     current_spec = [sid, n, False]
                 elif section == "rules":
                     pass  # rule
@@ -755,6 +836,9 @@ def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | Non
             report.warn("roadmap.milestone-dod", path, milestones[mid][0], "milestone without a `Milestone DoD: …` line")
 
     for t in tasks.values():
+        if v2 and t.box == "x":
+            report.error("roadmap.done-task", path, t.line,
+                         f"`ROADMAP:TASK:{t.id}` is [x]: closed tasks live in the archive, not in the roadmap")
         if t.box == "~" and not t.claimed_by and not t.blocked:
             report.error("roadmap.claim-missing", path, t.line,
                          f"`ROADMAP:TASK:{t.id}` is [~] without `claimed by <user>` (nor `blocked:`)")
@@ -768,12 +852,14 @@ def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | Non
             report.warn("roadmap.blocked-not-in-progress", path, t.line,
                         f"`ROADMAP:TASK:{t.id}` carries `blocked:` without being [~]")
         for sid in t.implements:
-            if sid not in specs:
+            if sid not in specs and not (v2 and sid in archive.specs):
                 report.error("roadmap.unknown-ref", path, t.line,
                              f"`ROADMAP:TASK:{t.id}` implements a nonexistent `ROADMAP:SPEC:{sid}`")
         for dep in t.depends:
             if dep == t.id:
                 report.error("roadmap.self-dependency", path, t.line, f"`ROADMAP:TASK:{t.id}` depends on itself")
+            elif dep not in tasks and v2 and dep in archive.closed:
+                continue  # closed in the archive: known, and done
             elif dep not in tasks:
                 report.error("roadmap.unknown-ref", path, t.line,
                              f"`ROADMAP:TASK:{t.id}` depends on a nonexistent `ROADMAP:TASK:{dep}`")
@@ -810,14 +896,271 @@ def check_roadmap(report: Report, root: Path, canon: dict[int, CanonEntry] | Non
                              f"`ROADMAP:MILESTONE:{mid}` is done with tasks that are not [x]: "
                              + ", ".join(f"TASK:{t}" for t in undone))
 
-    if canon is not None and (root / ".claude" / "canon").is_dir():
+    if canon is not None and (v2 or (root / ".claude" / "canon").is_dir()):
         for n, raw in enumerate(lines, start=1):
             for ref in CANON_REF_RE.findall(raw):
                 if int(ref) not in canon:
                     report.warn("roadmap.unknown-canon-ref", path, n, f"reference to unknown `CANON:{ref}`")
+    return tasks
 
 
 # ---------------------------------------------------------------------------------------------
+# Layout v2 — `.claude/journal/` present. Grammar: canon-tracker (page grammar, journal),
+# roadmap-tracker (archive, `history:` element); see `docs/grammar.md` part "v2 layout".
+# ---------------------------------------------------------------------------------------------
+
+JOURNAL_CANON_RE = re.compile(r"^canon-\d{4}-\d{2}\.md$")
+JOURNAL_ROADMAP_RE = re.compile(r"^roadmap-\d{4}-\d{2}\.md$")
+PAGE_BUDGET = 40960  # bytes; WARN only (a project's canon may set another budget)
+PAGE_RULE_RE = re.compile(
+    r"^- `CANON:(?P<id>\d+)` \[(?:USER:(?P<user>[^\]\s](?:[^\]]*[^\]\s])?)|(?P<model>MODEL))\] (?P<text>\S.*)$"
+)
+PAGE_DATED_RE = re.compile(r"^- `CANON:\d+` \[(?:USER:[^\]]*|MODEL)\s\d{4}-\d{2}-\d{2}\]")
+PAGE_USER_DATED_RE = re.compile(r"\s\d{4}-\d{2}-\d{2}$")
+PAGE_SOURCES_RE = re.compile(r"(?:^|\s)Sources ?:\s+(?P<ids>`CANON:\d+`(?:, `CANON:\d+`)*)\.?\s*$")
+PAGE_STRIKE_RE = re.compile(r"~~|—\s*obsol[eè]te")
+JOURNAL_START_RE = re.compile(r"^(?:- )?(?:~~)?`CANON:(\d+)`")
+FENCE_RE = re.compile(r"^\s*(`{3,})(.*)$")
+ARCHIVE_TASK_RE = re.compile(r"^- \[(.)\] `ROADMAP:TASK:(\d+)`")
+ARCHIVE_SPEC_RE = re.compile(r"ROADMAP:SPEC:(\d+)")
+ARCHIVE_MILESTONE_RE = re.compile(r"ROADMAP:MILESTONE:(\d+)")
+
+
+@dataclass
+class Archive:
+    """What the roadmap archive (`.claude/journal/roadmap-YYYY-MM.md`) says, read by checkbox only."""
+    files: set[str] = field(default_factory=set)
+    closed: dict[int, tuple[Path, int]] = field(default_factory=dict)  # id -> first closure
+    history: list[tuple[Path, int, int]] = field(default_factory=list)  # (file, line, id)
+    specs: set[int] = field(default_factory=set)
+    milestones: set[int] = field(default_factory=set)
+
+
+def _journal_files(root: Path, name_re) -> list[Path]:
+    """The files of `.claude/journal/` that the validator reads; every other file is ignored."""
+    return sorted(p for p in (root / ".claude" / "journal").iterdir() if p.is_file() and name_re.match(p.name))
+
+
+def _short(path: Path) -> str:
+    return f"{path.parent.name}/{path.name}"
+
+
+def _fenced_lines(lines: list[str]):
+    """Yields (n, line) of the lines outside fenced blocks (``` or longer); fences themselves are skipped."""
+    fence = 0
+    for n, raw in enumerate(lines, start=1):
+        m = FENCE_RE.match(raw.rstrip())
+        if fence:
+            if m and len(m.group(1)) >= fence and not m.group(2).strip():
+                fence = 0
+            continue
+        if m:
+            fence = len(m.group(1))
+            continue
+        yield n, raw.rstrip()
+
+
+def check_canon_v2(report: Report, root: Path) -> set[int]:
+    """Canon pages + canon journal. Returns every `CANON:n` ID known (pages and journal)."""
+    canon_dir = root / ".claude" / "canon"
+    page_ids: dict[int, tuple[Path, int]] = {}
+    journal_ids: dict[int, tuple[Path, int]] = {}
+    sources: list[tuple[Path, int, int, int]] = []  # (page, line, rule id, cited source id)
+    texts: list[tuple[Path, int, str]] = []  # text scanned for cross-references
+
+    def register(ids, path, n, cid):
+        for known in (page_ids, journal_ids):
+            if cid in known:
+                prev = known[cid]
+                report.error("canon.duplicate-id", path, n,
+                             f"`CANON:{cid}` already used ({_short(prev[0])}:{prev[1]}) — "
+                             "IDs must be unique across pages and journal")
+                return
+        ids[cid] = (path, n)
+
+    # Pages.
+    for path in sorted(canon_dir.glob("*.md")) if canon_dir.is_dir() else []:
+        if path.name == "misc.md":
+            report.error("canon.misc", path, None,
+                         "never `misc.md`: an entry that fits nowhere signals a theme to name")
+        text = read_text(report, path)
+        if text is None:
+            continue
+        if path.stat().st_size > PAGE_BUDGET:
+            report.warn("canon.page-size", path, None,
+                        f"page of {path.stat().st_size} bytes, over the budget of {PAGE_BUDGET}: split the theme")
+        lines = text.splitlines()
+        first = next(((n, l) for n, l in enumerate(lines, 1) if l.strip()), None)
+        if first is None or not re.match(r"^# \S", first[1]):
+            report.error("canon.title", path, first[0] if first else None,
+                         "the file must start with a title `# <Theme>`")
+        after_rule = False
+        for n, raw in enumerate(lines, start=1):
+            line = raw.rstrip()
+            if not line.strip():
+                continue
+            struck = bool(PAGE_STRIKE_RE.search(line))
+            if struck:
+                report.error("canon.page-strike", path, n,
+                             "no strike-through (`~~`) or `— obsolete` mark on a page: obsolete rules leave the page")
+            if first is not None and n == first[0] and re.match(r"^# \S", line):
+                after_rule = False
+                continue
+            if line.startswith(("## ", "### ")):
+                after_rule = False
+                continue
+            if line[0] in " \t":
+                if after_rule:
+                    report.error("canon.page-rule", path, n,
+                                 "a rule fits on ONE line: no indented continuation under a rule")
+                else:
+                    report.error("canon.prose", path, n, f"prose outside a rule: {line.strip()[:60]!r}")
+                continue
+            if not line.startswith("- "):
+                after_rule = False
+                report.error("canon.prose", path, n, f"prose outside a rule: {line.strip()[:60]!r}")
+                continue
+            after_rule = True
+            m = PAGE_RULE_RE.match(line)
+            if m and m.group("user") and PAGE_USER_DATED_RE.search(m.group("user")):
+                m = None
+            if not m:
+                if not struck:
+                    dated = " (a page provenance carries no date)" if PAGE_DATED_RE.match(line) else ""
+                    report.error("canon.page-rule", path, n,
+                                 "malformed rule: expected - `CANON:n` [USER:<name>] <text> Sources: `CANON:a`, `CANON:b`."
+                                 " or [MODEL]" + dated)
+                continue
+            cid = int(m.group("id"))
+            register(page_ids, path, n, cid)
+            body_text = m.group("text")
+            sm = PAGE_SOURCES_RE.search(body_text)
+            if not sm:
+                report.error("canon.page-sources", path, n,
+                             f"`CANON:{cid}` without a well-formed tail `Sources: `CANON:a`, `CANON:b`.`")
+            else:
+                body_text = body_text[:sm.start()].rstrip()
+                if not body_text:
+                    report.error("canon.page-rule", path, n, f"`CANON:{cid}` has an empty text")
+                for sid in re.findall(r"CANON:(\d+)", sm.group("ids")):
+                    sources.append((path, n, cid, int(sid)))
+            texts.append((path, n, body_text))
+
+    # Journal.
+    for path in _journal_files(root, JOURNAL_CANON_RE):
+        text = read_text(report, path)
+        if text is None:
+            continue
+        lines = text.splitlines()
+        first = next(((n, l) for n, l in enumerate(lines, 1) if l.strip()), None)
+        if first is not None and not re.match(r"^# \S", first[1]):
+            report.warn("journal.title", path, first[0], "the journal file should start with a title `# <title>`")
+        current = None  # [line, id, parts]
+
+        def flush():
+            nonlocal current
+            if current is None:
+                return
+            n, cid, parts = current
+            current = None
+            entry_text = " ".join(parts)
+            register(journal_ids, path, n, cid)
+            probe = Report(root)
+            parse_canon_entry(probe, path, n, entry_text)
+            for f in probe.findings:
+                report.warn("journal.entry", path, n, f"{f.message} (v1 check `{f.code}`)")
+            texts.append((path, n, entry_text))
+
+        for n, line in _fenced_lines(lines):
+            if not line.strip():
+                flush()
+                continue
+            if line[0] in " \t":
+                if current is not None:
+                    current[2].append(line.strip())
+                else:
+                    report.warn("journal.prose", path, n, f"line outside the journal grammar: {line.strip()[:60]!r}")
+                continue
+            flush()
+            if line.startswith("#"):
+                continue
+            m = JOURNAL_START_RE.match(line)
+            if m:
+                current = [n, int(m.group(1)), [line[2:].strip() if line.startswith("- ") else line.strip()]]
+            else:
+                report.warn("journal.prose", path, n, f"line outside the journal grammar: {line.strip()[:60]!r}")
+        flush()
+
+    known = set(page_ids) | set(journal_ids)
+    for path, n, cid, sid in sources:
+        if sid not in journal_ids:
+            where = "is only a page rule" if sid in page_ids else "does not exist"
+            report.error("canon.unknown-source", path, n,
+                         f"`CANON:{cid}` cites `CANON:{sid}` in Sources, which {where} "
+                         "(a source is an entry of the canon journal)")
+    for path, n, body in texts:
+        for ref in CANON_REF_RE.findall(body):
+            if int(ref) not in known:
+                report.warn("canon.unknown-ref", path, n, f"reference to unknown `CANON:{ref}`")
+    return known
+
+
+def scan_archive(report: Report, root: Path) -> Archive:
+    """Reads the roadmap archive by checkbox only; everything else in it is tolerated silently."""
+    archive = Archive()
+    for path in _journal_files(root, JOURNAL_ROADMAP_RE):
+        archive.files.add(path.name)
+        text = read_text(report, path)
+        if text is None:
+            continue
+        for n, line in _fenced_lines(text.splitlines()):
+            archive.specs.update(int(i) for i in ARCHIVE_SPEC_RE.findall(line))
+            archive.milestones.update(int(i) for i in ARCHIVE_MILESTONE_RE.findall(line))
+            m = ARCHIVE_TASK_RE.match(line)
+            if not m:
+                continue
+            tid = int(m.group(2))
+            if m.group(1) == "x":
+                if tid in archive.closed:
+                    prev = archive.closed[tid]
+                    report.error("roadmap.closed-twice", path, n,
+                                 f"`ROADMAP:TASK:{tid}` already closed ({_short(prev[0])}:{prev[1]})")
+                else:
+                    archive.closed[tid] = (path, n)
+            elif m.group(1) in (" ", "~"):
+                archive.history.append((path, n, tid))
+    return archive
+
+
+def check_archive_cross(report: Report, root: Path, archive: Archive, tasks: dict[int, Task]) -> None:
+    """Archive against the open roadmap: a task is closed OR open, never both.
+
+    A history line is written while its task is open and stays after the task is closed (the archive is
+    append-only), so it is valid when the task is open in the roadmap OR closed in the archive; it is an
+    error only when the task is neither."""
+    roadmap = root / ".claude" / "roadmap.md"
+    for tid, (path, n) in archive.closed.items():
+        task = tasks.get(tid)
+        if task is None:
+            continue
+        if task.box == "x":
+            report.error("roadmap.closed-twice", roadmap, task.line,
+                         f"`ROADMAP:TASK:{tid}` already closed in the archive ({_short(path)}:{n})")
+        else:
+            report.error("roadmap.closed-and-open", path, n,
+                         f"`ROADMAP:TASK:{tid}` is closed here and still open in the roadmap (line {task.line})")
+    for path, n, tid in archive.history:
+        task = tasks.get(tid)
+        if task is not None and task.box != "x":
+            continue  # open in the roadmap
+        if tid in archive.closed:
+            continue  # closed in the archive: the history line stays (append-only)
+        report.error("roadmap.history-not-open", path, n,
+                     f"history line of `ROADMAP:TASK:{tid}`, which is neither open in the roadmap nor closed in the archive")
+
+
+def is_v2(root: Path) -> bool:
+    return (root / ".claude" / "journal").is_dir()
 
 
 def validate(root: Path) -> Report:
@@ -825,6 +1168,14 @@ def validate(root: Path) -> Report:
     check_manifests(report, root)
     check_frontmatters(report, root)
     check_model_mentions(report, root)
+    check_launch_lines(report, root)
+    if is_v2(root):
+        known = check_canon_v2(report, root)
+        archive = scan_archive(report, root)
+        tasks = check_roadmap(report, root, known, archive)
+        if tasks is not None:
+            check_archive_cross(report, root, archive, tasks)
+        return report
     canon = check_canon(report, root)
     check_roadmap(report, root, canon)
     return report

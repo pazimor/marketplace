@@ -64,7 +64,11 @@ export type Recap = {
   limits: Record<string, Limit>
   costUsd: number | null
   alerted: string[]
+  restoredAt?: number // when the recap came back from its snapshot, after the process restarted
 }
+
+/** A session's recap kept in `$.store` under `recap:<sessionId>`, so it survives a restart of the process. */
+export type Snapshot = { savedAt: number; startedAt?: number; recap: Recap }
 
 export type Options = {
   limitWarn: number
@@ -88,6 +92,6 @@ export type Forecast = { atReset: number | null; exhaustedAt: number | null }
 
 declare module 'claude-code' {
   interface PluginState {
-    'agents-info': { recap: Recap; folded: string[]; tick: number; hidden: boolean }
+    'agents-info': { recap: Recap; folded: string[]; tick: number; hidden: boolean; paneClosed: boolean }
   }
 }
